@@ -59,9 +59,7 @@ html,body{
   max-width:min(1100px, 95vw);
 }
 
-.pill.msg{
-  color:var(--accent);
-}
+.pill.msg{ color:var(--accent); }
 
 #minimap{
   position:fixed;
@@ -185,3 +183,4 @@ html,body{
   background:rgba(239,68,68,.12);
   border-color:rgba(239,68,68,.35);
 }
+.btn.danger:hover{ background:rgba(239,68,68,.18); }
