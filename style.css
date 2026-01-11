@@ -8,6 +8,7 @@
 }
 
 *{ box-sizing:border-box; }
+
 html,body{
   height:100%;
   margin:0;
@@ -59,7 +60,9 @@ html,body{
   max-width:min(1100px, 95vw);
 }
 
-.pill.msg{ color:var(--accent); }
+.pill.msg{
+  color:var(--accent);
+}
 
 #minimap{
   position:fixed;
@@ -171,16 +174,17 @@ html,body{
   cursor:pointer;
   font-weight:600;
 }
+
 .btn:hover{ background:rgba(255,255,255,.12); }
 
 .btn.buy{
   background:rgba(34,197,94,.16);
   border-color:rgba(34,197,94,.35);
 }
+
 .btn.buy:hover{ background:rgba(34,197,94,.22); }
 
 .btn.danger{
   background:rgba(239,68,68,.12);
   border-color:rgba(239,68,68,.35);
 }
-.btn.danger:hover{ background:rgba(239,68,68,.18); }
