@@ -3,50 +3,34 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Project Game Maker: Zombie FPS</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Project Game Maker: Zombie RPG FPS</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div id="hud">
     <div class="row">
-      <div><b>HP</b>: <span id="hp">100</span></div>
-      <div><b>Ammo</b>: <span id="ammo">8</span>/<span id="mag">8</span> | <b>Reserve</b>: <span id="reserve">32</span></div>
-      <div><b>Cash</b>: $<span id="cash">0</span></div>
-      <div><b>Wave</b>: <span id="wave">1</span></div>
+      <div class="pill"><b>HP</b>: <span id="hp">100</span></div>
+      <div class="pill"><b>Weapon</b>: <span id="weapon">Rusty Pistol</span></div>
+      <div class="pill"><b>Ammo</b>: <span id="ammo">8</span>/<span id="mag">8</span> | <b>Reserve</b>: <span id="reserve">32</span></div>
+      <div class="pill"><b>Cash</b>: $<span id="cash">0</span></div>
+      <div class="pill"><b>Wave</b>: <span id="wave">1</span></div>
+      <div class="pill"><b>Lv</b>: <span id="level">1</span> (<span id="xp">0</span> XP)</div>
     </div>
+
     <div class="row small">
-      <div>Click to play | Move: <b>WASD</b> | Reload: <b>R</b> | Shop: <b>E</b> in SAFE ZONE</div>
-      <div class="pill" id="hint"></div>
+      <div>Click to play | Move: <b>WASD</b> | Reload: <b>R</b> | Shop: <b>E</b> in SAFE ZONE | Switch: <b>1</b>/<b>2</b> | Knife: <b>3</b></div>
+      <div class="pill" id="hint">Loading…</div>
     </div>
   </div>
 
   <canvas id="game"></canvas>
 
-  <!-- SHOP -->
   <div id="shop" class="overlay hidden">
     <div class="panel">
-      <h2>Safe Zone Shop</h2>
-      <p class="muted">Game pauses here. Upgrade, then go back out there.</p>
+      <h2>Safe Zone Weapon Shop</h2>
+      <p class="muted">Buy ammo, meds, and unlock better weapons as you level up.</p>
 
-      <div class="shop-grid">
-        <button id="buyAmmo" class="shop-btn">
-          <span class="title">Ammo Pack</span>
-          <span class="desc">+16 reserve ammo</span>
-          <span class="price">$15</span>
-        </button>
-
-        <button id="buyMed" class="shop-btn">
-          <span class="title">Medkit</span>
-          <span class="desc">Heal +35 HP</span>
-          <span class="price">$20</span>
-        </button>
-
-        <button id="buyDmg" class="shop-btn">
-          <span class="title">Damage Upgrade</span>
-          <span class="desc">+20% bullet damage (stacks)</span>
-          <span class="price">$40</span>
-        </button>
-      </div>
+      <div class="shop-grid" id="shopList"></div>
 
       <div class="footer">
         <button id="closeShop">Close (E / ESC)</button>
@@ -54,15 +38,14 @@
     </div>
   </div>
 
-  <!-- DEATH -->
   <div id="death" class="overlay hidden">
     <div class="panel">
       <h2>You died 🧟</h2>
-      <p class="muted">Prototype reset (we’ll add saving later).</p>
+      <p class="muted">Prototype reset (saving later).</p>
       <button id="restart">Restart</button>
     </div>
   </div>
 
-  <script src="game.js"></script>
+  <script src="./game.js"></script>
 </body>
 </html>
