@@ -1,7 +1,8 @@
-// Project Game Maker: Zombie RPG FPS (Raycast)
-// Adds: Shop Stand (press Q), pause/freeze zombies in shop, audio (gun/hit/zombie), saving (localStorage),
-// minimap shop marker, slightly smoother gun + more detailed zombie billboard.
+// Project Game Maker: Zombie RPG FPS (Raycast) - FULL VERSION
+// Includes: pitch look, head/body/leg damage, better groan, wall-mounted shop kiosk, grounded sprites,
+// different gun models per weapon, saving (localStorage), Q shop pause.
 
+// ---------- Canvas ----------
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -47,12 +48,8 @@ function setHint(t, ok = false) {
   ui.hint.style.borderColor = ok ? "rgba(34,197,94,.35)" : "rgba(255,255,255,.08)";
 }
 
-// ---------- AUDIO (no external files) ----------
-let audio = {
-  ctx: null,
-  master: null,
-  enabled: true,
-};
+// ---------- AUDIO ----------
+let audio = { ctx: null, master: null, enabled: true };
 
 function ensureAudio() {
   if (audio.ctx) return true;
@@ -63,22 +60,28 @@ function ensureAudio() {
     audio.master.gain.value = 0.35;
     audio.master.connect(audio.ctx.destination);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
+function userGesture() {
+  ensureAudio();
+  if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume().catch(()=>{});
+}
+addEventListener("mousedown", userGesture, { passive:true });
+addEventListener("keydown", userGesture, { passive:true });
+addEventListener("touchstart", userGesture, { passive:true });
 
-function playNoiseBurst(duration = 0.06, gain = 0.25, hp = 1400, lp = 80) {
-  if (!audio.enabled) return;
-  if (!ensureAudio()) return;
-
+function playNoise(duration = 0.18, gain = 0.18, hp = 50, lp = 800) {
+  if (!audio.enabled || !ensureAudio()) return;
   const ac = audio.ctx;
   const len = Math.floor(ac.sampleRate * duration);
   const buf = ac.createBuffer(1, len, ac.sampleRate);
   const data = buf.getChannelData(0);
+
   for (let i = 0; i < len; i++) {
     const t = i / len;
-    data[i] = (Math.random() * 2 - 1) * (1 - t); // fade out
+    // “breathy” noise: smoother than harsh random
+    const r = (Math.random()*2 - 1);
+    data[i] = r * (0.9 - t) * 0.9;
   }
 
   const src = ac.createBufferSource();
@@ -103,10 +106,8 @@ function playNoiseBurst(duration = 0.06, gain = 0.25, hp = 1400, lp = 80) {
   src.start();
 }
 
-function playTone(freq = 220, duration = 0.07, gain = 0.18, type = "square") {
-  if (!audio.enabled) return;
-  if (!ensureAudio()) return;
-
+function playTone(freq = 120, duration = 0.14, gain = 0.12, type = "sawtooth") {
+  if (!audio.enabled || !ensureAudio()) return;
   const ac = audio.ctx;
   const o = ac.createOscillator();
   const g = ac.createGain();
@@ -124,39 +125,35 @@ function playTone(freq = 220, duration = 0.07, gain = 0.18, type = "square") {
 }
 
 function sfxGun() {
-  // punchy pop + hiss
+  // Keep your pop
   playTone(160, 0.05, 0.16, "square");
-  playTone(90, 0.05, 0.10, "sawtooth");
-  playNoiseBurst(0.05, 0.18, 1200, 9000);
+  playTone(95, 0.05, 0.10, "sawtooth");
+  playNoise(0.05, 0.14, 1200, 9000);
 }
 
 function sfxHit() {
-  // quick click + tiny thump
-  playTone(720, 0.03, 0.11, "triangle");
+  playTone(760, 0.03, 0.10, "triangle");
   playTone(120, 0.05, 0.08, "sine");
 }
 
-function sfxZombie(distanceToPlayer = 6) {
-  // low groan with distance volume
-  const vol = clamp(1 - distanceToPlayer / 10, 0, 1) * 0.20;
+function sfxZombieGroan(dToPlayer = 6) {
+  // More “rrrr” groan: low tones + breathy noise
+  const vol = clamp(1 - dToPlayer / 10, 0, 1) * 0.22;
   if (vol <= 0.01) return;
-  playTone(70 + rand(-6, 6), 0.18, vol, "sawtooth");
-  playTone(110 + rand(-10, 10), 0.10, vol * 0.6, "triangle");
+
+  playTone(62 + rand(-4,4), 0.22, vol * 0.55, "sawtooth");
+  playTone(92 + rand(-6,6), 0.18, vol * 0.35, "triangle");
+  playNoise(0.25, vol * 0.35, 40, 520);
 }
 
-// ---------- SAVE / LOAD ----------
-const SAVE_KEY = "pgm_zombie_rpg2_save_v1";
-
+// ---------- SAVE ----------
+const SAVE_KEY = "pgm_zombie_rpg_save_v2";
 function xpToNext(level) {
   return Math.floor(60 + (level - 1) * 40 + Math.pow(level - 1, 1.35) * 25);
 }
-
 function saveGame() {
   try {
-    const owned = player.slots.filter(Boolean).map(w => w.id);
-    const slotIds = player.slots.map(w => (w ? w.id : null));
-
-    // store ammo inside weapon objects so swapping preserves
+    // store weapon ammo inside weapon obj
     for (const w of player.slots) {
       if (!w) continue;
       w._mag = w._mag ?? w.magSize;
@@ -168,7 +165,7 @@ function saveGame() {
       level: player.level,
       xp: player.xp,
       dmgMult: player.dmgMult,
-      slotIds,
+      slotIds: player.slots.map(w => (w ? w.id : null)),
       activeSlot: player.activeSlot,
       usingKnife: player.usingKnife,
       weaponState: Object.fromEntries(
@@ -178,7 +175,6 @@ function saveGame() {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {}
 }
-
 function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -190,11 +186,9 @@ function loadGame() {
     player.xp = data.xp ?? 0;
     player.dmgMult = data.dmgMult ?? 1;
 
-    // rebuild slots from ids
-    const slotIds = Array.isArray(data.slotIds) ? data.slotIds : [ "pistol_rusty", null ];
-    player.slots = slotIds.map(id => (id ? structuredClone(W(id)) : null));
+    const ids = Array.isArray(data.slotIds) ? data.slotIds : ["pistol_rusty", null];
+    player.slots = ids.map(id => (id ? structuredClone(W(id)) : null));
 
-    // restore weapon ammo states
     const ws = data.weaponState || {};
     for (const w of player.slots) {
       if (!w) continue;
@@ -207,7 +201,6 @@ function loadGame() {
     player.activeSlot = data.activeSlot ?? 0;
     player.usingKnife = !!data.usingKnife;
 
-    // sync active
     if (!player.usingKnife && player.slots[player.activeSlot]) {
       syncAmmoToWeapon(player.slots[player.activeSlot]);
     }
@@ -219,12 +212,9 @@ function loadGame() {
   }
 }
 
-// autosave every 10 seconds
-let saveTimer = 0;
-
-// ---------- GAME STATE ----------
+// ---------- GAME ----------
 const game = {
-  mode: "play", // play | shop | dead
+  mode: "play",
   pointerLocked: false,
   wave: 1,
   t: 0,
@@ -235,32 +225,26 @@ const game = {
 let mouseDown = false;
 let lookDelta = 0;
 
+// ---------- Controls ----------
 function lockPointer() { canvas.requestPointerLock?.(); }
 document.addEventListener("pointerlockchange", () => {
   game.pointerLocked = (document.pointerLockElement === canvas);
 });
-
-// any user gesture can unlock audio
-function userGesture() {
-  ensureAudio();
-  if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume().catch(()=>{});
-}
-addEventListener("mousedown", userGesture, { passive:true });
-addEventListener("keydown", userGesture, { passive:true });
-addEventListener("touchstart", userGesture, { passive:true });
-
 addEventListener("mousedown", (e) => {
   if (e.button === 0) mouseDown = true;
   if (!game.pointerLocked && game.mode === "play") lockPointer();
 });
-addEventListener("mouseup", (e) => {
-  if (e.button === 0) mouseDown = false;
-});
+addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
 
 addEventListener("mousemove", (e) => {
   if (!game.pointerLocked) return;
   if (game.mode !== "play") return;
+
   lookDelta += (e.movementX || 0);
+
+  // look up/down
+  const my = (e.movementY || 0);
+  player.pitch = clamp(player.pitch + my * 0.0022, -0.9, 0.9);
 });
 
 const keys = new Set();
@@ -271,14 +255,12 @@ addEventListener("keydown", (e) => {
   if (k === "r") reload();
   if (k === "escape" && game.mode === "shop") closeShop();
 
-  // shop open/close with Q at stand
   if (k === "q") {
     if (game.mode === "shop") closeShop();
-    else if (game.mode === "play" && nearShopStand()) openShop();
-    else if (game.mode === "play") setHint("Find the shop stand and press Q.", false);
+    else if (game.mode === "play" && nearShopKiosk()) openShop();
+    else if (game.mode === "play") setHint("Find the green SHOP kiosk and press Q.", false);
   }
 
-  // weapon switching
   if (k === "1") equipSlot(0);
   if (k === "2") equipSlot(1);
   if (k === "3") equipKnife();
@@ -322,15 +304,17 @@ function isWall(x, y) {
   return map[iy][ix] === 1;
 }
 
-// ---------- SHOP STAND OBJECT ----------
-const shopStand = {
-  x: 1.9,
-  y: 1.9,
-  r: 1.05,  // interaction radius
+// ---------- Shop kiosk (WALL-MOUNTED) ----------
+const shopKiosk = {
+  // attached to wall area near start
+  x: 2.05,
+  y: 1.25,
+  r: 1.15,
+  facing: Math.PI / 2, // decorative, for billboard tilt look
 };
 
-function nearShopStand() {
-  return dist(player.x, player.y, shopStand.x, shopStand.y) <= shopStand.r;
+function nearShopKiosk() {
+  return dist(player.x, player.y, shopKiosk.x, shopKiosk.y) <= shopKiosk.r;
 }
 
 // ---------- WEAPONS ----------
@@ -339,10 +323,6 @@ const WEAPONS = [
   { id:"pistol_service", name:"Service Pistol", type:"pistol", rarity:"Uncommon", unlockLevel:2, price:60, dmg:28, fireRate:3.6, magSize:10, reloadTime:0.92, spread:0.010, range:11.0, reserveStart:40 },
   { id:"pistol_marksman", name:"Marksman Pistol", type:"pistol", rarity:"Rare", unlockLevel:4, price:140, dmg:36, fireRate:3.2, magSize:12, reloadTime:0.90, spread:0.008, range:12.0, reserveStart:48 },
   { id:"pistol_relic", name:"Relic Pistol", type:"pistol", rarity:"Epic", unlockLevel:7, price:320, dmg:48, fireRate:3.0, magSize:14, reloadTime:0.88, spread:0.007, range:13.0, reserveStart:56 },
-
-  // later:
-  { id:"smg_scrap", name:"Scrap SMG (Coming Soon)", type:"smg", rarity:"Common", unlockLevel:3, price:180, dmg:12, fireRate:10.0, magSize:24, reloadTime:1.15, spread:0.020, range:9.0, reserveStart:72, comingSoon:true },
-  { id:"shotgun_pipe", name:"Pipe Shotgun (Coming Soon)", type:"shotgun", rarity:"Uncommon", unlockLevel:5, price:280, dmg:10, pellets:7, fireRate:1.0, magSize:5, reloadTime:1.45, spread:0.060, range:8.0, reserveStart:30, comingSoon:true },
 ];
 function W(id){ return WEAPONS.find(w => w.id === id); }
 
@@ -350,6 +330,7 @@ function W(id){ return WEAPONS.find(w => w.id === id); }
 const player = {
   x: 1.6, y: 1.6,
   a: 0,
+  pitch: 0, // look up/down
   fov: Math.PI / 3,
 
   hp: 100, maxHp: 100,
@@ -374,7 +355,6 @@ function currentWeapon() {
   if (player.usingKnife) return null;
   return player.slots[player.activeSlot];
 }
-
 function syncAmmoToWeapon(w) {
   if (!w) return;
   if (w._mag == null) w._mag = w.magSize;
@@ -387,7 +367,6 @@ function syncAmmoToWeapon(w) {
 
   ui.mag.textContent = w.magSize;
 }
-
 function saveAmmoFromWeapon(w) {
   if (!w) return;
   w._mag = player.ammo.mag;
@@ -419,8 +398,6 @@ function equipKnife() {
 }
 
 syncAmmoToWeapon(player.slots[0]);
-
-// try load save once
 loadGame();
 
 // ---------- SHOP ----------
@@ -429,7 +406,7 @@ function openShop() {
   ui.shop.classList.remove("hidden");
   ui.death.classList.add("hidden");
   renderShop();
-  setHint("SHOP OPEN: game paused/frozen. Q / ESC to close.", true);
+  setHint("SHOP OPEN (paused). Q / ESC to close.", true);
   saveGame();
 }
 function closeShop() {
@@ -440,19 +417,31 @@ function closeShop() {
 }
 ui.closeShop.addEventListener("click", closeShop);
 
+function ownsWeapon(id) {
+  return player.slots.some(s => s && s.id === id) || id === "pistol_rusty";
+}
 function canBuyWeapon(w) {
-  if (w.comingSoon) return { ok:false, why:"Coming soon" };
   if (player.level < w.unlockLevel) return { ok:false, why:`Requires Lv ${w.unlockLevel}` };
   if (player.cash < w.price) return { ok:false, why:`Need $${w.price}` };
   return { ok:true, why:"Buy" };
 }
-function ownsWeapon(id) { return player.slots.some(s => s && s.id === id); }
-
 function giveWeapon(id) {
   const w = structuredClone(W(id));
-  player.slots[1] = w; // slot 2 for now
+  player.slots[1] = w;
   setHint(`Bought: ${w.name}. Slot 2 (press 2).`, true);
   saveGame();
+}
+
+function shopButton({title, desc, price, onClick, locked=false, lockText=""}) {
+  const btn = document.createElement("button");
+  btn.className = "shop-btn" + (locked ? " locked" : "");
+  btn.innerHTML = `
+    <span class="title">${title}</span>
+    <span class="desc">${desc}${locked && lockText ? ` • ${lockText}` : ""}</span>
+    <span class="price">${price ? "$"+price : "$0"}</span>
+  `;
+  btn.addEventListener("click", () => { if (!locked) onClick(); });
+  return btn;
 }
 
 function renderShop() {
@@ -490,19 +479,16 @@ function renderShop() {
     }
   }));
 
-  for (const w of WEAPONS.filter(x => x.type === "pistol" || x.comingSoon)) {
-    const owned = ownsWeapon(w.id) || (w.id === "pistol_rusty");
+  for (const w of WEAPONS) {
+    const owned = ownsWeapon(w.id);
     const can = canBuyWeapon(w);
-
-    let desc = `${w.rarity} ${w.type.toUpperCase()} | Dmg ${w.dmg} | Mag ${w.magSize} | Lv ${w.unlockLevel}`;
-    if (owned) desc = "Owned (equip with 1/2)";
 
     ui.shopList.appendChild(shopButton({
       title: w.name,
-      desc,
+      desc: owned ? "Owned (equip with 1/2)" : `${w.rarity} PISTOL | Dmg ${w.dmg} | Mag ${w.magSize} | Lv ${w.unlockLevel}`,
       price: w.price,
-      locked: (!can.ok && !owned) || w.comingSoon,
-      lockText: w.comingSoon ? "Coming soon" : (!owned ? can.why : "Owned"),
+      locked: (!can.ok && !owned),
+      lockText: owned ? "Owned" : can.why,
       onClick: () => {
         if (owned) return setHint("You already own that.", false);
         if (!can.ok) return setHint(can.why, false);
@@ -514,28 +500,16 @@ function renderShop() {
   }
 }
 
-function shopButton({title, desc, price, onClick, locked=false, lockText=""}) {
-  const btn = document.createElement("button");
-  btn.className = "shop-btn" + (locked ? " locked" : "");
-  btn.innerHTML = `
-    <span class="title">${title}</span>
-    <span class="desc">${desc}${locked && lockText ? ` • ${lockText}` : ""}</span>
-    <span class="price">${price ? "$"+price : "$0"}</span>
-  `;
-  btn.addEventListener("click", () => { if (!locked) onClick(); });
-  return btn;
-}
-
-// ---------- ZOMBIES + DROPS ----------
+// ---------- Enemies + drops ----------
 let zombies = [];
 let drops = [];
 
 function spawnZombie() {
-  for (let tries = 0; tries < 80; tries++) {
+  for (let tries = 0; tries < 90; tries++) {
     const x = rand(1.5, MAP_W - 1.5);
     const y = rand(1.5, MAP_H - 1.5);
     if (isWall(x, y)) continue;
-    if (dist(x, y, shopStand.x, shopStand.y) < 3.2) continue; // don't spawn right on shop
+    if (dist(x, y, shopKiosk.x, shopKiosk.y) < 3.0) continue;
     if (dist(x, y, player.x, player.y) < 4.0) continue;
 
     const hp = 65 + game.wave * 10;
@@ -547,7 +521,7 @@ function spawnZombie() {
       dmg: 9 + game.wave * 1.6,
       hitCd: 0,
       type: Math.random() < 0.18 ? "runner" : "walker",
-      groanT: rand(1.0, 4.0),
+      groanT: rand(1.2, 4.8),
     });
     return;
   }
@@ -557,7 +531,17 @@ function dropCash(x, y, amount) {
   drops.push({ x, y, amount, t: 14, r: 0.22 });
 }
 
-// ---------- COMBAT ----------
+function gainXP(amount) {
+  player.xp += amount;
+  while (player.xp >= xpToNext(player.level)) {
+    player.xp -= xpToNext(player.level);
+    player.level++;
+    setHint(`LEVEL UP! Now Lv ${player.level}`, true);
+  }
+  saveGame();
+}
+
+// ---------- Combat ----------
 function reload() {
   if (game.mode !== "play") return;
   if (player.usingKnife) return setHint("Knife doesn't reload 😈", true);
@@ -567,7 +551,7 @@ function reload() {
 
   if (player.ammo.reloading) return;
   if (player.ammo.mag >= w.magSize) return;
-  if (player.ammo.reserve <= 0) return setHint("No reserve ammo. Buy ammo at the shop stand.", false);
+  if (player.ammo.reserve <= 0) return setHint("No reserve ammo. Buy ammo at the shop.", false);
 
   player.ammo.reloading = true;
   player.ammo.rt = 0;
@@ -605,11 +589,13 @@ function knifeAttack() {
     if (best.hp <= 0) {
       const cash = Math.floor(rand(8, 15) + game.wave * 0.9);
       const xp = 18 + game.wave * 2;
-      awardKill(best.x, best.y, cash, xp);
+      dropCash(best.x, best.y, cash);
+      gainXP(xp);
       zombies = zombies.filter(z => z !== best);
+      player.cash += 0; // just explicit
       setHint(`KNIFE KILL! +$${cash}, +${xp} XP`, true);
     } else {
-      setHint(`Knife hit! -${player.knife.dmg}`, true);
+      setHint(`Knife hit!`, true);
     }
   }
 }
@@ -658,13 +644,32 @@ function shoot() {
 
     if (hitZ) {
       didHit = true;
-      const dmg = w.dmg * player.dmgMult;
+
+      // hitzones based on crosshair Y against projected sprite
+      const hgt = innerHeight;
+      const horizon = (hgt / 2) + (player.pitch * (hgt * 0.35));
+      const spriteSize = clamp((hgt * 0.90) / (dist(player.x, player.y, hitZ.x, hitZ.y) + 0.001), 12, hgt * 1.25);
+      const spriteBottom = horizon + spriteSize * 0.35;
+      const spriteTop = spriteBottom - spriteSize;
+
+      const crossY = hgt / 2;
+      const yRel = (crossY - spriteTop) / spriteSize; // 0 top -> 1 bottom
+
+      let mult = 1.0;
+      let label = "";
+      if (yRel < 0.28) { mult = 1.8; label = "HEADSHOT"; }
+      else if (yRel > 0.78) { mult = 0.65; label = "Leg shot"; }
+
+      const dmg = w.dmg * player.dmgMult * mult;
       hitZ.hp -= dmg;
+
+      if (label) setHint(label + "!", true);
 
       if (hitZ.hp <= 0) {
         const cash = Math.floor(rand(7, 14) + game.wave * 0.8);
         const xp = 14 + game.wave * 2;
-        awardKill(hitZ.x, hitZ.y, cash, xp);
+        dropCash(hitZ.x, hitZ.y, cash);
+        gainXP(xp);
         zombies = zombies.filter(z => z !== hitZ);
       }
     }
@@ -672,7 +677,6 @@ function shoot() {
 
   if (didHit) {
     sfxHit();
-    setHint("Hit!", true);
   }
 
   const cw = currentWeapon();
@@ -680,22 +684,7 @@ function shoot() {
   saveGame();
 }
 
-function awardKill(x, y, cash, xp) {
-  dropCash(x, y, cash);
-  gainXP(xp);
-}
-
-function gainXP(amount) {
-  player.xp += amount;
-  while (player.xp >= xpToNext(player.level)) {
-    player.xp -= xpToNext(player.level);
-    player.level++;
-    setHint(`LEVEL UP! Now Lv ${player.level}`, true);
-  }
-  saveGame();
-}
-
-// ---------- RAYCAST ----------
+// ---------- Raycast ----------
 function castRay(angle) {
   const step = 0.02;
   for (let d = 0; d < 20; d += step) {
@@ -706,7 +695,7 @@ function castRay(angle) {
   return 20;
 }
 
-// ---------- RENDER HELPERS ----------
+// ---------- Minimap ----------
 function drawMinimap() {
   const w = innerWidth;
 
@@ -730,9 +719,9 @@ function drawMinimap() {
     }
   }
 
-  // shop marker
+  // kiosk marker
   ctx.fillStyle = "rgba(34,197,94,.95)";
-  ctx.fillRect(x0 + shopStand.x * cell - 3, y0 + shopStand.y * cell - 3, 6, 6);
+  ctx.fillRect(x0 + shopKiosk.x * cell - 3, y0 + shopKiosk.y * cell - 3, 6, 6);
 
   // zombies
   ctx.fillStyle = "rgba(239,68,68,.85)";
@@ -742,7 +731,7 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  // player + facing
+  // player
   ctx.fillStyle = "rgba(96,165,250,.95)";
   ctx.beginPath();
   ctx.arc(x0 + player.x * cell, y0 + player.y * cell, 3.2, 0, Math.PI * 2);
@@ -758,6 +747,23 @@ function drawMinimap() {
   ctx.stroke();
 }
 
+// ---------- Gun model (fixed forward + per weapon) ----------
+function gunStyleFor(id) {
+  if (id === "pistol_rusty") {
+    return { body:"rgba(60,70,85,.96)", dark:"rgba(22,26,34,.98)", accent:"rgba(170,120,60,.85)", bodyLen:118, barrelLen:22 };
+  }
+  if (id === "pistol_service") {
+    return { body:"rgba(55,65,80,.96)", dark:"rgba(18,20,26,.98)", accent:"rgba(80,160,255,.85)", bodyLen:132, barrelLen:26 };
+  }
+  if (id === "pistol_marksman") {
+    return { body:"rgba(48,58,72,.96)", dark:"rgba(15,18,24,.98)", accent:"rgba(210,210,220,.85)", bodyLen:145, barrelLen:30 };
+  }
+  if (id === "pistol_relic") {
+    return { body:"rgba(40,48,60,.96)", dark:"rgba(10,12,16,.98)", accent:"rgba(200,80,255,.85)", bodyLen:156, barrelLen:34 };
+  }
+  return { body:"rgba(55,65,80,.96)", dark:"rgba(18,20,26,.98)", accent:"rgba(34,197,94,.85)", bodyLen:126, barrelLen:24 };
+}
+
 function drawGunModel(dt) {
   const w = innerWidth, h = innerHeight;
 
@@ -765,92 +771,107 @@ function drawGunModel(dt) {
   game.muzzle = Math.max(0, game.muzzle - dt * 3.2);
 
   const moving = (keys.has("w") || keys.has("a") || keys.has("s") || keys.has("d"));
-  const bob = moving ? Math.sin(performance.now() / 85) * 5 : 0;
+  const bob = moving ? Math.sin(performance.now() / 90) * 4 : 0;
 
-  const rx = game.recoil * 26;
-  const ry = game.recoil * 20;
+  const rx = game.recoil * 22;
+  const ry = game.recoil * 16;
 
-  const baseX = w * 0.70 + rx;
-  const baseY = h * 0.72 + bob + ry;
+  // centered and forward
+  const baseX = w * 0.56 + rx;
+  const baseY = h * 0.74 + bob + ry;
+
+  const cw = currentWeapon();
+  const sid = cw ? cw.id : "knife";
+  const style = gunStyleFor(sid);
 
   ctx.save();
   ctx.globalAlpha = 0.98;
 
+  ctx.translate(baseX, baseY);
+  ctx.rotate(-0.06);
+
   // arm
   ctx.fillStyle = "rgba(190,150,120,.92)";
-  ctx.fillRect(baseX - 34, baseY + 42, 100, 18);
+  ctx.fillRect(-42, 46, 120, 18);
 
   // glove
-  ctx.fillStyle = "rgba(20,22,28,.96)";
-  ctx.fillRect(baseX - 10, baseY + 34, 42, 32);
+  ctx.fillStyle = "rgba(18,20,26,.96)";
+  ctx.fillRect(-14, 36, 44, 34);
 
-  // gun (a bit cleaner silhouette)
-  ctx.fillStyle = "rgba(55,65,80,.96)";
-  ctx.fillRect(baseX, baseY + 14, 128, 34);
+  // gun body
+  ctx.fillStyle = style.body;
+  ctx.fillRect(0, 18, style.bodyLen, 34);
 
-  ctx.fillStyle = "rgba(28,32,40,.98)";
-  ctx.fillRect(baseX + 10, baseY + 18, 98, 10);
+  // top rail
+  ctx.fillStyle = style.dark;
+  ctx.fillRect(10, 22, style.bodyLen - 30, 10);
 
-  ctx.fillStyle = "rgba(40,45,56,.98)";
-  ctx.fillRect(baseX + 22, baseY + 44, 40, 56);
+  // grip
+  ctx.fillStyle = style.dark;
+  ctx.fillRect(22, 46, 40, 56);
 
   // barrel
-  ctx.fillStyle = "rgba(18,20,26,.98)";
-  ctx.fillRect(baseX + 118, baseY + 20, 28, 10);
+  ctx.fillStyle = style.dark;
+  ctx.fillRect(style.bodyLen - 10, 24, style.barrelLen, 10);
+
+  // accent stripe
+  ctx.fillStyle = style.accent;
+  ctx.fillRect(8, 40, Math.max(18, style.bodyLen * 0.45), 4);
 
   // muzzle flash
   if (game.muzzle > 0) {
-    const a = 0.72 * (game.muzzle / 0.06);
+    const a = 0.75 * (game.muzzle / 0.06);
     ctx.fillStyle = `rgba(255,210,80,${a})`;
     ctx.beginPath();
-    ctx.arc(baseX + 150, baseY + 24, 14, 0, Math.PI * 2);
+    ctx.arc(style.bodyLen + style.barrelLen + 8, 28, 14, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // knife swing overlay
   if (player.usingKnife && player.knife.swing > 0) {
     const t = player.knife.swing / 0.14;
-    ctx.fillStyle = `rgba(220,220,230,${0.32 * t})`;
-    ctx.fillRect(w * 0.55, h * 0.45, w * 0.45, h * 0.55);
+    ctx.fillStyle = `rgba(220,220,230,${0.28 * t})`;
+    ctx.fillRect(-w * 0.05, -h * 0.05, w * 0.40, h * 0.40);
   }
 
   ctx.restore();
 }
 
-function drawShopStandBillboard(screenX, top, size) {
-  // little kiosk stand sprite
+// ---------- Kiosk billboard (wall mounted) ----------
+function drawShopKioskBillboard(screenX, top, size) {
   const left = screenX - size / 2;
 
-  // pole
-  ctx.fillStyle = "rgba(80,90,110,.95)";
-  ctx.fillRect(left + size*0.48, top + size*0.20, size*0.04, size*0.62);
+  // wall plate
+  ctx.fillStyle = "rgba(30,34,44,.94)";
+  ctx.fillRect(left + size*0.12, top + size*0.20, size*0.76, size*0.60);
 
-  // sign
-  ctx.fillStyle = "rgba(34,197,94,.92)";
-  ctx.fillRect(left + size*0.18, top + size*0.14, size*0.64, size*0.20);
+  // green sign (attached)
+  ctx.fillStyle = "rgba(34,197,94,.95)";
+  ctx.fillRect(left + size*0.18, top + size*0.22, size*0.64, size*0.18);
 
   ctx.fillStyle = "rgba(0,0,0,.55)";
   ctx.font = `bold ${Math.max(10, size*0.12)}px system-ui`;
-  ctx.fillText("SHOP", left + size*0.26, top + size*0.28);
+  ctx.fillText("SHOP", left + size*0.28, top + size*0.34);
 
-  // counter box
-  ctx.fillStyle = "rgba(30,34,44,.92)";
-  ctx.fillRect(left + size*0.20, top + size*0.50, size*0.60, size*0.26);
+  // slot / counter
+  ctx.fillStyle = "rgba(255,255,255,.18)";
+  ctx.fillRect(left + size*0.24, top + size*0.52, size*0.52, size*0.06);
 
-  // little “light”
-  ctx.fillStyle = "rgba(255,255,255,.35)";
-  ctx.fillRect(left + size*0.28, top + size*0.56, size*0.44, size*0.04);
+  // little glow
+  ctx.fillStyle = "rgba(34,197,94,.18)";
+  ctx.fillRect(left + size*0.18, top + size*0.22, size*0.64, size*0.58);
 }
 
-// ---------- RENDER ----------
+// ---------- Render ----------
 function render(dt) {
   const w = innerWidth, h = innerHeight;
+  const horizon = (h / 2) + (player.pitch * (h * 0.35));
 
   // sky + floor
   ctx.fillStyle = "#0b1220";
-  ctx.fillRect(0, 0, w, h / 2);
+  ctx.fillRect(0, 0, w, horizon);
   ctx.fillStyle = "#070a0f";
-  ctx.fillRect(0, h / 2, w, h / 2);
+  ctx.fillRect(0, horizon, w, h - horizon);
 
   // walls
   const rays = Math.floor(w / 2);
@@ -863,7 +884,7 @@ function render(dt) {
 
     const wallH = Math.min(h, (h * 1.2) / (d + 0.0001));
     const x = i * (w / rays);
-    const y = (h / 2) - wallH / 2;
+    const y = horizon - wallH / 2;
 
     const shade = clamp(1 - d / 9, 0, 1);
     const base = 55;
@@ -880,11 +901,11 @@ function render(dt) {
     }
   }
 
-  // sprite list (includes shop stand)
+  // sprites (zombies + cash + kiosk)
   const sprites = [];
   for (const z of zombies) sprites.push({ kind: "z", ...z, d: dist(player.x, player.y, z.x, z.y) });
   for (const d of drops) sprites.push({ kind: "d", ...d, d: dist(player.x, player.y, d.x, d.y) });
-  sprites.push({ kind: "shop", x: shopStand.x, y: shopStand.y, d: dist(player.x, player.y, shopStand.x, shopStand.y) });
+  sprites.push({ kind: "kiosk", x: shopKiosk.x, y: shopKiosk.y, d: dist(player.x, player.y, shopKiosk.x, shopKiosk.y) });
 
   sprites.sort((a, b) => b.d - a.d);
 
@@ -904,30 +925,32 @@ function render(dt) {
 
     const screenX = (ang / (player.fov / 2)) * (w / 2) + (w / 2);
     const size = clamp((h * 0.90) / (distTo + 0.001), 12, h * 1.25);
-    const top = h / 2 - size / 2;
 
-    if (s.kind === "shop") {
-      drawShopStandBillboard(screenX, top, size * 0.92);
+    // feet on floor
+    const spriteBottom = horizon + size * 0.35;
+    const top = spriteBottom - size;
+
+    if (s.kind === "kiosk") {
+      drawShopKioskBillboard(screenX, top, size * 0.92);
       continue;
     }
 
     if (s.kind === "z") {
-      // more detailed zombie billboard with tiny animation
       const runner = s.type === "runner";
-      const bodyCol = runner ? "rgba(239,68,68,.88)" : "rgba(160,175,190,.88)";
-      const darkCol = runner ? "rgba(120,20,20,.9)" : "rgba(70,80,95,.9)";
+      const bodyCol = runner ? "rgba(239,68,68,.90)" : "rgba(160,175,190,.90)";
+      const darkCol = runner ? "rgba(120,20,20,.92)" : "rgba(70,80,95,.92)";
       const bob = Math.sin(performance.now() / 130 + s.x * 2.1) * (size * 0.02);
 
       const left = screenX - size / 2;
 
       // legs
       ctx.fillStyle = darkCol;
-      ctx.fillRect(left + size*0.36, top + size*0.72 + bob, size*0.10, size*0.22);
-      ctx.fillRect(left + size*0.54, top + size*0.72 + bob, size*0.10, size*0.22);
+      ctx.fillRect(left + size*0.36, top + size*0.72 + bob, size*0.10, size*0.24);
+      ctx.fillRect(left + size*0.54, top + size*0.72 + bob, size*0.10, size*0.24);
 
       // torso
       ctx.fillStyle = bodyCol;
-      ctx.fillRect(left + size*0.32, top + size*0.34 + bob, size*0.42, size*0.46);
+      ctx.fillRect(left + size*0.32, top + size*0.34 + bob, size*0.42, size*0.48);
 
       // head
       ctx.fillStyle = bodyCol;
@@ -937,8 +960,8 @@ function render(dt) {
 
       // arms
       ctx.fillStyle = darkCol;
-      ctx.fillRect(left + size*0.20, top + size*0.42 + bob, size*0.12, size*0.30);
-      ctx.fillRect(left + size*0.72, top + size*0.42 + bob, size*0.12, size*0.30);
+      ctx.fillRect(left + size*0.20, top + size*0.42 + bob, size*0.12, size*0.32);
+      ctx.fillRect(left + size*0.72, top + size*0.42 + bob, size*0.12, size*0.32);
 
       // eyes
       ctx.fillStyle = "rgba(0,0,0,.45)";
@@ -955,11 +978,11 @@ function render(dt) {
       // cash drop
       ctx.fillStyle = "rgba(34,197,94,.9)";
       ctx.beginPath();
-      ctx.arc(screenX, h / 2 + size * 0.18, Math.max(6, size * 0.09), 0, Math.PI * 2);
+      ctx.arc(screenX, horizon + size * 0.10, Math.max(6, size * 0.09), 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#06120a";
       ctx.font = "bold 14px system-ui";
-      ctx.fillText("$", screenX - 4, h / 2 + size * 0.18 + 5);
+      ctx.fillText("$", screenX - 4, horizon + size * 0.10 + 5);
     }
   }
 
@@ -977,17 +1000,17 @@ function render(dt) {
   drawMinimap();
   drawGunModel(dt);
 
-  // prompt near shop stand
-  if (nearShopStand() && game.mode === "play") {
+  // kiosk prompt
+  if (nearShopKiosk() && game.mode === "play") {
     ctx.fillStyle = "rgba(0,0,0,.35)";
-    ctx.fillRect(w * 0.37, h * 0.62, w * 0.26, 36);
+    ctx.fillRect(w * 0.34, h * 0.62, w * 0.32, 36);
     ctx.fillStyle = "rgba(34,197,94,.95)";
     ctx.font = "bold 16px system-ui";
-    ctx.fillText("Press Q to open Shop", w * 0.39, h * 0.645);
+    ctx.fillText("Press Q to open Shop", w * 0.37, h * 0.645);
   }
 }
 
-// ---------- DEATH + RESTART ----------
+// ---------- Death ----------
 function die() {
   game.mode = "dead";
   ui.shop.classList.add("hidden");
@@ -1010,19 +1033,20 @@ ui.restart.addEventListener("click", () => {
   player.x = 1.6; player.y = 1.6; player.a = 0;
   player.hp = player.maxHp;
 
-  // keep your save progression, but reset wave pressure
   setHint("Restarted. Progress kept. Click to lock mouse.", true);
   saveGame();
 });
 
-// ---------- LOOP ----------
+// ---------- Loop ----------
 let last = performance.now();
+let saveTimer = 0;
+
 function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
 
-  // UI
+  // UI sync
   ui.hp.textContent = Math.max(0, Math.floor(player.hp));
   ui.cash.textContent = player.cash;
   ui.wave.textContent = game.wave;
@@ -1044,20 +1068,20 @@ function tick(now) {
 
   render(dt);
 
-  // autosave timer
+  // autosave
   saveTimer += dt;
   if (saveTimer >= 10) {
     saveTimer = 0;
     saveGame();
   }
 
-  // timers
+  // knife timers
   if (player.knife.t > 0) player.knife.t = Math.max(0, player.knife.t - dt);
   if (player.knife.swing > 0) player.knife.swing = Math.max(0, player.knife.swing - dt);
 
   if (game.mode !== "play") return;
 
-  // wave timer
+  // wave pacing
   game.t += dt;
   if (game.t > game.wave * 25) game.wave++;
 
@@ -1077,7 +1101,7 @@ function tick(now) {
     }
   }
 
-  // look
+  // look yaw
   player.a += lookDelta * 0.0022;
   lookDelta = 0;
 
@@ -1101,21 +1125,20 @@ function tick(now) {
   const target = 4 + game.wave * 2;
   if (zombies.length < target && Math.random() < 0.08 + game.wave * 0.002) spawnZombie();
 
-  // zombie AI + groans
+  // zombie AI + groan
   for (let i = zombies.length - 1; i >= 0; i--) {
     const z = zombies[i];
     z.hitCd = Math.max(0, z.hitCd - dt);
 
-    // groan timer
     z.groanT -= dt;
     if (z.groanT <= 0) {
-      z.groanT = rand(2.0, 5.5);
+      z.groanT = rand(2.2, 5.6);
       const d = dist(player.x, player.y, z.x, z.y);
-      sfxZombie(d);
+      sfxZombieGroan(d);
     }
 
     const ang = Math.atan2(player.y - z.y, player.x - z.x);
-    let spz = z.speed * (z.type === "runner" ? 1.18 : 1);
+    const spz = z.speed * (z.type === "runner" ? 1.18 : 1);
 
     const zx = z.x + Math.cos(ang) * spz * dt;
     const zy = z.y + Math.sin(ang) * spz * dt;
@@ -1146,12 +1169,12 @@ function tick(now) {
     if (d.t <= 0) drops.splice(i, 1);
   }
 
-  // shooting
+  // shoot
   if (mouseDown) shoot();
 
-  // near shop hint
-  if (nearShopStand()) setHint("At Shop Stand: press Q.", true);
+  // kiosk hint
+  if (nearShopKiosk()) setHint("At SHOP kiosk: press Q.", true);
 }
 
-setHint("Click to play. Find the SHOP stand. Press Q to open it.");
+setHint("Click to play. Find the green SHOP kiosk. Press Q.");
 requestAnimationFrame(tick);
