@@ -2,83 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Project Game Maker: Zombie RPG FPS</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <canvas id="game"></canvas>
-
-  <!-- HUD -->
   <div id="hud">
     <div class="row">
-      <div class="pill" id="hpPill">HP: 100</div>
-      <div class="pill" id="wepPill">Weapon: Rusty Pistol</div>
-      <div class="pill" id="ammoPill">Ammo: 8/8 | Reserve: 24</div>
-      <div class="pill" id="cashPill">Cash: $0</div>
-      <div class="pill" id="wavePill">Wave: 1</div>
-      <div class="pill" id="lvlPill">Lv: 1 (0 XP)</div>
+      <div class="pill"><b>HP</b>: <span id="hp">100</span></div>
+      <div class="pill"><b>Weapon</b>: <span id="weapon">Rusty Pistol</span></div>
+      <div class="pill"><b>Ammo</b>: <span id="ammo">8</span>/<span id="mag">8</span> | <b>Reserve</b>: <span id="reserve">32</span></div>
+      <div class="pill"><b>Cash</b>: $<span id="cash">0</span></div>
+      <div class="pill"><b>Wave</b>: <span id="wave">1</span></div>
+      <div class="pill"><b>Lv</b>: <span id="level">1</span> (<span id="xp">0</span> XP)</div>
     </div>
+
     <div class="row small">
-      <div class="pill help" id="helpPill">
-        Click to lock mouse | WASD move | Mouse look | Space jump | Ctrl crouch | R reload |
-        1/2 weapons | 3 knife | Q shop (near stand)
-      </div>
-      <div class="pill msg" id="msgPill">Ready.</div>
+      <div>Click to play | Move <b>WASD</b> | Reload <b>R</b> | Shop <b>Q</b> at kiosk | Switch <b>1</b>/<b>2</b> | Knife <b>3</b></div>
+      <div class="pill" id="hint">Loading…</div>
     </div>
   </div>
 
-  <!-- Minimap -->
-  <canvas id="minimap" width="180" height="180" aria-label="minimap"></canvas>
+  <canvas id="game"></canvas>
 
-  <!-- Shop Prompt -->
-  <div id="shopPrompt" class="floatingPrompt hidden">Press <b>Q</b> to open Shop</div>
-
-  <!-- Shop Overlay -->
-  <div id="overlay" class="overlay hidden">
+  <div id="shop" class="overlay hidden">
     <div class="panel">
-      <div class="panelHeader">
-        <div>
-          <div class="title">Wall Shop Stand</div>
-          <div class="sub">Buy guns + upgrades. Zombies frozen while open.</div>
-        </div>
-        <button id="closeShopBtn" class="btn">Close (Q)</button>
-      </div>
-
-      <div class="cols">
-        <div class="col">
-          <div class="sectionTitle">Weapons</div>
-          <div id="shopWeapons"></div>
-        </div>
-
-        <div class="col">
-          <div class="sectionTitle">Upgrades</div>
-          <div id="shopUpgrades"></div>
-        </div>
-
-        <div class="col">
-          <div class="sectionTitle">Loadout</div>
-          <div class="card">
-            <div class="line"><b>Primary (1):</b> <span id="slot1Name">Rusty Pistol</span></div>
-            <div class="line"><b>Secondary (2):</b> <span id="slot2Name">Empty</span></div>
-            <div class="line"><b>Knife (3):</b> Always available</div>
-            <div class="line hint">Tip: click a weapon’s “Equip to 1/2”.</div>
-          </div>
-
-          <div class="sectionTitle">Progress</div>
-          <div class="card">
-            <div class="line">Cash: <b id="shopCash">$0</b></div>
-            <div class="line">Level: <b id="shopLvl">1</b></div>
-            <div class="line">XP: <b id="shopXp">0</b></div>
-            <div class="line hint">Progress saves locally (your browser).</div>
-          </div>
-
-          <button id="resetBtn" class="btn danger">Reset Save</button>
-        </div>
+      <h2>Weapon Shop</h2>
+      <p class="muted">Walk up to the kiosk, press <b>Q</b>. Game pauses while shopping.</p>
+      <div class="shop-grid" id="shopList"></div>
+      <div class="footer">
+        <button id="closeShop">Close (Q / ESC)</button>
       </div>
     </div>
   </div>
 
-  <script src="game.js"></script>
+  <div id="death" class="overlay hidden">
+    <div class="panel">
+      <h2>You died 🧟</h2>
+      <p class="muted">Progress is saved. Wave pressure resets.</p>
+      <button id="restart">Restart</button>
+    </div>
+  </div>
+
+  <script src="./game.js"></script>
 </body>
 </html>
