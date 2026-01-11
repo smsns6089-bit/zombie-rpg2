@@ -15,17 +15,18 @@
       <div><b>Wave</b>: <span id="wave">1</span></div>
     </div>
     <div class="row small">
-      <div>Click to play | Move: <b>WASD</b> | Reload: <b>R</b> | Shop: in <b>SAFE ZONE</b> + <b>E</b></div>
+      <div>Click to play | Move: <b>WASD</b> | Reload: <b>R</b> | Shop: <b>E</b> in SAFE ZONE</div>
       <div class="pill" id="hint"></div>
     </div>
   </div>
 
   <canvas id="game"></canvas>
 
-  <div id="shop" class="hidden">
+  <!-- SHOP -->
+  <div id="shop" class="overlay hidden">
     <div class="panel">
       <h2>Safe Zone Shop</h2>
-      <p class="muted">Upgrade, then go back out there. 🧟</p>
+      <p class="muted">Game pauses here. Upgrade, then go back out there.</p>
 
       <div class="shop-grid">
         <button id="buyAmmo" class="shop-btn">
@@ -33,11 +34,13 @@
           <span class="desc">+16 reserve ammo</span>
           <span class="price">$15</span>
         </button>
+
         <button id="buyMed" class="shop-btn">
           <span class="title">Medkit</span>
           <span class="desc">Heal +35 HP</span>
           <span class="price">$20</span>
         </button>
+
         <button id="buyDmg" class="shop-btn">
           <span class="title">Damage Upgrade</span>
           <span class="desc">+20% bullet damage (stacks)</span>
@@ -46,12 +49,13 @@
       </div>
 
       <div class="footer">
-        <button id="closeShop">Close (E)</button>
+        <button id="closeShop">Close (E / ESC)</button>
       </div>
     </div>
   </div>
 
-  <div id="death" class="hidden">
+  <!-- DEATH -->
+  <div id="death" class="overlay hidden">
     <div class="panel">
       <h2>You died 🧟</h2>
       <p class="muted">Prototype reset (we’ll add saving later).</p>
