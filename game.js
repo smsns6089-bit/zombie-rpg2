@@ -1,10 +1,10 @@
-// Project Game Maker: Zombie FPS (Raycasting) - FULL FIXED VERSION
-// Fixes: shop+death overlay stacking, shop pauses game, restart always clears overlays.
-// Controls: Click to lock mouse, WASD move, R reload, E shop (in safe zone), ESC close shop
+// Project Game Maker: Zombie FPS (Raycasting) - FULL VERSION (DARK WALL FIX INCLUDED)
+// Controls: Click to lock mouse | WASD | R reload | E shop (safe zone) | ESC close shop
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+// ---------- UI ----------
 const ui = {
   hp: document.getElementById("hp"),
   ammo: document.getElementById("ammo"),
@@ -44,6 +44,7 @@ function setHint(t, ok = false) {
   ui.hint.style.borderColor = ok ? "rgba(34,197,94,.35)" : "rgba(255,255,255,.08)";
 }
 
+// ---------- GAME STATE ----------
 const game = {
   mode: "play", // play | shop | dead
   pointerLocked: false,
@@ -87,6 +88,7 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
+// ---------- SHOP OVERLAYS ----------
 function openShop() {
   game.mode = "shop";
   ui.shop.classList.remove("hidden");
@@ -100,7 +102,7 @@ function closeShop() {
 }
 ui.closeShop.addEventListener("click", closeShop);
 
-// ---------------- MAP ----------------
+// ---------- MAP ----------
 const MAP_W = 24;
 const MAP_H = 24;
 
@@ -142,7 +144,7 @@ function inSafe() {
   return dist(player.x, player.y, safeZone.x, safeZone.y) <= safeZone.r;
 }
 
-// ---------------- PLAYER ----------------
+// ---------- PLAYER ----------
 const player = {
   x: 2.6, y: 2.6,
   a: 0,
@@ -166,7 +168,7 @@ const player = {
 };
 ui.mag.textContent = player.gun.magSize;
 
-// ---------------- SHOP ----------------
+// ---------- SHOP BUYS ----------
 ui.buyAmmo.addEventListener("click", () => {
   if (player.cash < 15) return setHint("Not enough cash.", false);
   player.cash -= 15;
@@ -186,7 +188,7 @@ ui.buyDmg.addEventListener("click", () => {
   setHint("Damage up (+20%).", true);
 });
 
-// ---------------- ENTITIES ----------------
+// ---------- ENEMIES + DROPS ----------
 let zombies = [];
 let drops = [];
 
@@ -216,7 +218,7 @@ function dropCash(x, y, amount) {
   drops.push({ x, y, amount, t: 14, r: 0.22 });
 }
 
-// ---------------- COMBAT ----------------
+// ---------- COMBAT ----------
 function reload() {
   if (game.mode !== "play") return;
   const g = player.gun;
@@ -241,7 +243,6 @@ function shoot() {
   g.lastShot = now;
   g.ammo--;
 
-  // hitscan ray: stop at wall, hit first zombie close to ray
   const step = 0.04;
   let hitZ = null;
 
@@ -274,7 +275,7 @@ function shoot() {
   }
 }
 
-// ---------------- RAYCASTING ----------------
+// ---------- RAYCAST ----------
 function castRay(angle) {
   const step = 0.02;
   for (let d = 0; d < 20; d += step) {
@@ -285,6 +286,7 @@ function castRay(angle) {
   return 20;
 }
 
+// ---------- RENDER (DARK WALL FIX) ----------
 function render() {
   const w = innerWidth, h = innerHeight;
 
@@ -294,28 +296,39 @@ function render() {
   ctx.fillStyle = "#070a0f";
   ctx.fillRect(0, h / 2, w, h / 2);
 
-  // walls
+  // walls (SOLID + DARK so it never turns white)
   const rays = Math.floor(w / 2);
   for (let i = 0; i < rays; i++) {
     const pct = i / (rays - 1);
     const ang = player.a - player.fov / 2 + pct * player.fov;
 
     let d = castRay(ang);
-    d *= Math.cos(ang - player.a); // fish-eye correction
+    d *= Math.cos(ang - player.a);
 
     const wallH = Math.min(h, (h * 1.2) / (d + 0.0001));
     const x = i * (w / rays);
     const y = (h / 2) - wallH / 2;
 
-    const shade = clamp(1 - d / 10, 0.08, 1);
-    ctx.fillStyle = `rgba(160,170,190,${0.12 + 0.55 * shade})`;
+    const shade = clamp(1 - d / 9, 0, 1);
+    const base = 50;
+    const bright = 150 * shade;
+    const c = Math.floor(base + bright);
+
+    ctx.fillStyle = `rgb(${c},${c + 10},${c + 25})`;
     ctx.fillRect(x, y, (w / rays) + 1, wallH);
+
+    // fog overlay
+    const fog = clamp((d - 3) / 10, 0, 0.85);
+    if (fog > 0) {
+      ctx.fillStyle = `rgba(8,10,14,${fog})`;
+      ctx.fillRect(x, y, (w / rays) + 1, wallH);
+    }
   }
 
-  // sprites (zombies + drops), far-to-near
+  // sprites (zombies + drops) sorted far -> near
   const sprites = [];
   for (const z of zombies) sprites.push({ kind: "z", ...z, d: dist(player.x, player.y, z.x, z.y) });
-  for (const d of drops)  sprites.push({ kind: "d", ...d, d: dist(player.x, player.y, d.x, d.y) });
+  for (const d of drops) sprites.push({ kind: "d", ...d, d: dist(player.x, player.y, d.x, d.y) });
   sprites.sort((a, b) => b.d - a.d);
 
   for (const s of sprites) {
@@ -329,7 +342,6 @@ function render() {
 
     if (Math.abs(ang) > player.fov / 2 + 0.35) continue;
 
-    // occlusion
     const rayD = castRay(player.a + ang);
     if (rayD + 0.05 < distTo) continue;
 
@@ -342,7 +354,6 @@ function render() {
       ctx.fillStyle = s.type === "runner" ? "rgba(239,68,68,.9)" : "rgba(148,163,184,.9)";
       ctx.fillRect(left, top, size, size);
 
-      // hp bar
       const pct = clamp(s.hp / s.maxHp, 0, 1);
       ctx.fillStyle = "rgba(0,0,0,.35)";
       ctx.fillRect(left, top - 10, size, 6);
@@ -377,7 +388,7 @@ function render() {
   ctx.stroke();
 }
 
-// ---------------- DEATH + RESTART ----------------
+// ---------- DEATH + RESTART ----------
 function die() {
   game.mode = "dead";
   ui.shop.classList.add("hidden"); // force close shop always
@@ -387,7 +398,6 @@ function die() {
 }
 
 ui.restart.addEventListener("click", () => {
-  // Reset game
   zombies = [];
   drops = [];
   game.wave = 1;
@@ -408,21 +418,21 @@ ui.restart.addEventListener("click", () => {
   setHint("Restarted. Click to lock mouse.", true);
 });
 
-// ---------------- GAME LOOP ----------------
+// ---------- LOOP ----------
 let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
 
-  // UI
+  // UI update
   ui.hp.textContent = Math.max(0, Math.floor(player.hp));
   ui.ammo.textContent = player.gun.ammo;
   ui.reserve.textContent = player.gun.reserve;
   ui.cash.textContent = player.cash;
   ui.wave.textContent = game.wave;
 
-  // Always render, even in shop/dead (so you see the world)
+  // always draw
   render();
 
   if (game.mode !== "play") return;
@@ -448,7 +458,7 @@ function tick(now) {
   player.a += lookDelta * 0.0022;
   lookDelta = 0;
 
-  // movement
+  // move
   let mx = 0, my = 0;
   if (keys.has("w")) { mx += Math.cos(player.a); my += Math.sin(player.a); }
   if (keys.has("s")) { mx -= Math.cos(player.a); my -= Math.sin(player.a); }
@@ -458,18 +468,18 @@ function tick(now) {
   const len = Math.hypot(mx, my) || 1;
   mx /= len; my /= len;
 
-  let sp = player.speed * (inSafe() ? 1.08 : 1);
+  const sp = player.speed * (inSafe() ? 1.08 : 1);
   const nx = player.x + mx * sp * dt;
   const ny = player.y + my * sp * dt;
 
   if (!isWall(nx, player.y)) player.x = nx;
   if (!isWall(player.x, ny)) player.y = ny;
 
-  // spawn
+  // spawn zombies
   const target = 4 + game.wave * 2;
   if (zombies.length < target && Math.random() < 0.08 + game.wave * 0.002) spawnZombie();
 
-  // zombie AI + damage
+  // zombie AI
   for (let i = zombies.length - 1; i >= 0; i--) {
     const z = zombies[i];
     z.hitCd = Math.max(0, z.hitCd - dt);
@@ -492,7 +502,7 @@ function tick(now) {
     }
   }
 
-  // pickup drops
+  // pick up drops
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     d.t -= dt;
