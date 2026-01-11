@@ -1,11 +1,11 @@
-/* Project Game Maker: Zombie RPG FPS (GitHub Pages friendly)
+/* Project Game Maker: Zombie RPG FPS (single-file, GitHub Pages friendly)
    Controls:
    - Click canvas to lock mouse
    - WASD move, Space jump, Ctrl crouch
-   - Mouse look (normal)
+   - Mouse look
    - LMB shoot, R reload
    - 1/2 switch guns, 3 knife
-   - Walk near wall shop stand, press Q to open (freezes zombies)
+   - Walk to wall shop stand, press Q to open (freezes zombies)
 */
 
 (() => {
@@ -57,7 +57,7 @@
   let mx = 0, my = 0;
 
   addEventListener("keydown", (e) => {
-    if (e.code === "Tab") e.preventDefault();
+    if (["Tab"].includes(e.code)) e.preventDefault();
     keys.add(e.code);
 
     if (e.code === "KeyQ") toggleShop();
@@ -90,7 +90,7 @@
     shoot();
   });
 
-  // ---------- AUDIO ----------
+  // ---------- AUDIO (WebAudio synth so no external files needed) ----------
   let audioCtx = null;
   function getAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -194,9 +194,7 @@
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       return JSON.parse(raw);
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
   function save() {
     const data = {
@@ -214,47 +212,45 @@
   // ---------- GAME DATA ----------
   const WEAPONS = {
     rusty_pistol: { id:"rusty_pistol", name:"Rusty Pistol", rarity:"Common", cost:0, minLevel:1, mag:8, reserve:24, fireDelay:0.22, damage:18, spread:0.010, range:30, model:"pistol" },
-    makeshift_smg:{ id:"makeshift_smg", name:"Makeshift SMG", rarity:"Uncommon", cost:120, minLevel:2, mag:18, reserve:72, fireDelay:0.09, damage:11, spread:0.020, range:26, model:"smg" },
-    old_shotgun:  { id:"old_shotgun", name:"Old Shotgun", rarity:"Rare", cost:260, minLevel:4, mag:5, reserve:25, fireDelay:0.65, damage:10, pellets:7, spread:0.060, range:22, model:"shotgun" }
+    makeshift_smg: { id:"makeshift_smg", name:"Makeshift SMG", rarity:"Uncommon", cost:120, minLevel:2, mag:18, reserve:72, fireDelay:0.09, damage:11, spread:0.020, range:26, model:"smg" },
+    old_shotgun: { id:"old_shotgun", name:"Old Shotgun", rarity:"Rare", cost:260, minLevel:4, mag:5, reserve:25, fireDelay:0.65, damage:10, pellets:7, spread:0.060, range:22, model:"shotgun" }
   };
 
   const UPGRADES = [
-    { id:"hp",   name:"Max HP +15",        cost:80,  max:6,  desc:"More survivability." },
-    { id:"dmg",  name:"Bullet Damage +10%",cost:90,  max:10, desc:"Stacks. Feels spicy." },
-    { id:"spd",  name:"Move Speed +6%",    cost:75,  max:10, desc:"Kite better." },
-    { id:"cash", name:"Cash Gain +10%",    cost:110, max:10, desc:"More $$$ per kill." }
+    { id:"hp", name:"Max HP +15", cost: 80, max: 6, desc:"More survivability." },
+    { id:"dmg", name:"Bullet Damage +10%", cost: 90, max: 10, desc:"Stacks." },
+    { id:"spd", name:"Move Speed +6%", cost: 75, max: 10, desc:"Kite better." },
+    { id:"cash", name:"Cash Gain +10%", cost: 110, max: 10, desc:"More $$$ per kill." }
   ];
 
   // ---------- STATE ----------
   const state = {
-    px:2.5, py:0, pz:2.5, vy:0,
-    yaw:0, pitch:0, crouch:0,
+    px: 2.5, py: 0, pz: 2.5,
+    vy: 0, yaw: 0, pitch: 0, crouch: 0,
+    hp: 100, maxHp: 100,
 
-    hp:100, maxHp:100,
-    cash:0, xp:0, level:1, wave:1,
+    cash: 0, xp: 0, level: 1, wave: 1,
+    upgrades: { hp:0, dmg:0, spd:0, cash:0 },
+    owned: new Set(["rusty_pistol"]),
+    slot1: "rusty_pistol",
+    slot2: null,
+    equippedSlot: 1,
 
-    upgrades:{ hp:0, dmg:0, spd:0, cash:0 },
-    owned:new Set(["rusty_pistol"]),
-    slot1:"rusty_pistol",
-    slot2:null,
-    equippedSlot:1,
+    ammoInMag: 8,
+    ammoReserve: 24,
+    lastShotAt: 0,
+    reloading: false,
 
-    ammoInMag:8,
-    ammoReserve:24,
-    lastShotAt:0,
-    reloading:false,
+    paused: false,
+    msg: "Ready.",
+    zombies: [],
 
-    paused:false,
-    msg:"Ready.",
-    zombies:[],
+    shopX: 14.6,
+    shopZ: 3.0,
 
-    shopX:14.6,
-    shopZ:3.0,
-
-    hitmarker:0
+    hitmarker: 0
   };
 
-  // apply save
   const saved = loadSave();
   if (saved) {
     state.cash = saved.cash ?? state.cash;
@@ -281,24 +277,25 @@
     "100010000000000001",
     "101111111111111101",
     "111111111111111111",
-  ].map(row => row.split("").map(c => c === "1" ? 1 : 0));
+  ].map(r => r.split("").map(c => c === "1" ? 1 : 0));
 
   function isWall(x, z) {
-    const gx = Math.floor(x), gz = Math.floor(z);
+    const gx = Math.floor(x);
+    const gz = Math.floor(z);
     if (gx < 0 || gz < 0 || gx >= MAP_W || gz >= MAP_H) return true;
     return map[gz][gx] === 1;
   }
 
   // ---------- SHOP ----------
-  function isShopOpen(){ return !overlay.classList.contains("hidden"); }
-  function shopNearPlayer(){
+  function isShopOpen() { return !overlay.classList.contains("hidden"); }
+  function shopNearPlayer() {
     const dx = state.px - state.shopX;
     const dz = state.pz - state.shopZ;
     return (dx*dx + dz*dz) < 2.2*2.2;
   }
 
-  function toggleShop(){
-    if (isShopOpen()){
+  function toggleShop() {
+    if (isShopOpen()) {
       overlay.classList.add("hidden");
       state.paused = false;
       state.msg = "Back to work.";
@@ -314,19 +311,10 @@
     rebuildShopUI();
   }
 
-  closeShopBtn.addEventListener("click", () => {
-    overlay.classList.add("hidden");
-    state.paused = false;
-    state.msg = "Closed shop.";
-    save();
-  });
+  closeShopBtn.addEventListener("click", () => { overlay.classList.add("hidden"); state.paused = false; state.msg="Closed shop."; save(); });
+  resetBtn.addEventListener("click", () => { localStorage.removeItem(SAVE_KEY); location.reload(); });
 
-  resetBtn.addEventListener("click", () => {
-    localStorage.removeItem(SAVE_KEY);
-    location.reload();
-  });
-
-  function rebuildShopUI(){
+  function rebuildShopUI() {
     shopCash.textContent = `$${state.cash}`;
     shopLvl.textContent = `${state.level}`;
     shopXp.textContent = `${state.xp}`;
@@ -383,31 +371,13 @@
       shopUpgrades.appendChild(div);
     });
 
-    shopWeapons.querySelectorAll("[data-buy]").forEach(btn => {
-      btn.addEventListener("click", () => buyWeapon(btn.getAttribute("data-buy")));
-    });
-    shopWeapons.querySelectorAll("[data-eq1]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-eq1");
-        if (state.owned.has(id)) state.slot1 = id;
-        if (state.equippedSlot === 1) loadWeaponStats(getCurrentWeaponId());
-        rebuildShopUI(); save();
-      });
-    });
-    shopWeapons.querySelectorAll("[data-eq2]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-eq2");
-        if (state.owned.has(id)) state.slot2 = id;
-        if (state.equippedSlot === 2) loadWeaponStats(getCurrentWeaponId());
-        rebuildShopUI(); save();
-      });
-    });
-    shopUpgrades.querySelectorAll("[data-up]").forEach(btn => {
-      btn.addEventListener("click", () => buyUpgrade(btn.getAttribute("data-up")));
-    });
+    shopWeapons.querySelectorAll("[data-buy]").forEach(btn => btn.addEventListener("click", () => buyWeapon(btn.getAttribute("data-buy"))));
+    shopWeapons.querySelectorAll("[data-eq1]").forEach(btn => btn.addEventListener("click", () => { const id = btn.getAttribute("data-eq1"); if (state.owned.has(id)) state.slot1 = id; if (state.equippedSlot===1) loadWeaponStats(getCurrentWeaponId()); rebuildShopUI(); save(); }));
+    shopWeapons.querySelectorAll("[data-eq2]").forEach(btn => btn.addEventListener("click", () => { const id = btn.getAttribute("data-eq2"); if (state.owned.has(id)) state.slot2 = id; if (state.equippedSlot===2) loadWeaponStats(getCurrentWeaponId()); rebuildShopUI(); save(); }));
+    shopUpgrades.querySelectorAll("[data-up]").forEach(btn => btn.addEventListener("click", () => buyUpgrade(btn.getAttribute("data-up"))));
   }
 
-  function buyWeapon(id){
+  function buyWeapon(id) {
     const w = WEAPONS[id];
     if (!w) return;
     if (state.owned.has(id)) return;
@@ -424,25 +394,23 @@
     save();
   }
 
-  function buyUpgrade(id){
+  function buyUpgrade(id) {
     const u = UPGRADES.find(x => x.id === id);
     if (!u) return;
     const lvl = state.upgrades[id] ?? 0;
     if (lvl >= u.max) return;
-
     const cost = Math.floor(u.cost * (1 + lvl * 0.22));
     if (state.cash < cost) return;
 
     state.cash -= cost;
     state.upgrades[id] = lvl + 1;
     applyUpgradeEffects();
-
     state.msg = `Upgraded: ${u.name}.`;
     rebuildShopUI();
     save();
   }
 
-  function applyUpgradeEffects(){
+  function applyUpgradeEffects() {
     const hpLvl = state.upgrades.hp ?? 0;
     const newMax = 100 + hpLvl * 15;
     const ratio = state.hp / state.maxHp;
@@ -451,32 +419,31 @@
   }
   applyUpgradeEffects();
 
-  // ---------- WEAPONS ----------
-  function getCurrentWeaponId(){
+  // ---------- WEAPON ----------
+  function getCurrentWeaponId() {
     if (state.equippedSlot === 1) return state.slot1;
     if (state.equippedSlot === 2) return state.slot2;
     return null;
   }
-  function getCurrentWeapon(){
+  function getCurrentWeapon() {
     const id = getCurrentWeaponId();
     return id ? WEAPONS[id] : null;
   }
 
-  function equipSlot(n){
+  function equipSlot(n) {
     if (isShopOpen()) return;
-    if (n === 2 && !state.slot2){ state.msg = "No secondary equipped."; return; }
+    if (n === 2 && !state.slot2) { state.msg = "No secondary equipped."; return; }
     state.equippedSlot = n;
     const id = getCurrentWeaponId();
-    if (id){ loadWeaponStats(id); state.msg = `Equipped: ${WEAPONS[id].name}`; }
+    if (id) { loadWeaponStats(id); state.msg = `Equipped: ${WEAPONS[id].name}`; }
   }
-
-  function equipKnife(){
+  function equipKnife() {
     if (isShopOpen()) return;
     state.equippedSlot = 3;
     state.msg = "Knife equipped.";
   }
 
-  function loadWeaponStats(id){
+  function loadWeaponStats(id) {
     const w = WEAPONS[id];
     if (!w) return;
     state.ammoInMag = w.mag;
@@ -485,18 +452,18 @@
   }
   loadWeaponStats(state.slot1);
 
-  function reload(){
+  function reload() {
     if (state.equippedSlot === 3) return;
     const w = getCurrentWeapon();
     if (!w) return;
     if (state.reloading) return;
-    if (state.ammoInMag >= w.mag){ state.msg = "Mag full."; return; }
-    if (state.ammoReserve <= 0){ state.msg = "No reserve ammo."; return; }
+    if (state.ammoInMag >= w.mag) { state.msg = "Mag full."; return; }
+    if (state.ammoReserve <= 0) { state.msg = "No reserve ammo."; return; }
 
     state.reloading = true;
     state.msg = "Reloading...";
+    const reloadTime = w.model === "shotgun" ? 0.95 : 0.75;
 
-    const reloadTime = (w.model === "shotgun") ? 0.95 : 0.75;
     setTimeout(() => {
       const need = w.mag - state.ammoInMag;
       const take = Math.min(need, state.ammoReserve);
@@ -508,36 +475,36 @@
   }
 
   // ---------- ZOMBIES ----------
-  function spawnZombie(){
-    for (let tries = 0; tries < 60; tries++){
-      const x = 1 + Math.random() * (MAP_W - 2);
-      const z = 1 + Math.random() * (MAP_H - 2);
-      if (isWall(x, z)) continue;
-      const dx = x - state.px, dz = z - state.pz;
-      if (dx*dx + dz*dz < 10) continue;
+  function spawnZombie() {
+    for (let tries=0; tries<50; tries++) {
+      const x = 1 + Math.random()*(MAP_W-2);
+      const z = 1 + Math.random()*(MAP_H-2);
+      if (isWall(x,z)) continue;
+      const dx=x-state.px, dz=z-state.pz;
+      if (dx*dx+dz*dz < 10) continue;
 
       state.zombies.push({
         x, z,
-        y: 0,          // grounded ✅
+        y: 0,
         h: 1.75,
         r: 0.32,
         hp: 55 + state.wave * 8,
         speed: 0.65 + state.wave * 0.05,
-        groanAt: 1.0 + Math.random() * 2.5,
+        groanAt: 0,
         hurtFlash: 0
       });
       return;
     }
   }
 
-  function startWave(){
+  function startWave() {
     const count = 3 + state.wave * 2;
-    for (let i = 0; i < count; i++) spawnZombie();
+    for (let i=0;i<count;i++) spawnZombie();
     state.msg = `Wave ${state.wave}!`;
   }
   startWave();
 
-  function giveKillRewards(){
+  function giveKillRewards() {
     const cashMult = 1 + (state.upgrades.cash ?? 0) * 0.10;
     const cashGain = Math.round((10 + state.wave * 2) * cashMult);
     const xpGain = 12 + state.wave * 2;
@@ -546,18 +513,18 @@
     state.xp += xpGain;
 
     const need = 60 + (state.level - 1) * 45;
-    if (state.xp >= need){
+    if (state.xp >= need) {
       state.xp -= need;
       state.level += 1;
       state.msg = `Level up! Now Lv ${state.level}.`;
     }
   }
 
-  function removeZombie(z){
+  function removeZombie(z) {
     const idx = state.zombies.indexOf(z);
     if (idx >= 0) state.zombies.splice(idx, 1);
 
-    if (state.zombies.length === 0){
+    if (state.zombies.length === 0) {
       state.wave += 1;
       state.msg = `Wave cleared! Incoming: ${state.wave}`;
       startWave();
@@ -565,14 +532,12 @@
     }
   }
 
-  // ---------- HITSCAN ----------
-  function raycastZombie(origin, dir, maxDist){
+  // ---------- SHOOT ----------
+  function raycastZombie(origin, dir, maxDist) {
     let best = null;
-
-    for (const z of state.zombies){
+    for (const z of state.zombies) {
       const ox = origin.x - z.x;
       const oz = origin.z - z.z;
-
       const dx = dir.x;
       const dz = dir.z;
 
@@ -586,133 +551,113 @@
       const sqrt = Math.sqrt(disc);
       const t1 = (-b - sqrt) / (2*a);
       const t2 = (-b + sqrt) / (2*a);
-
-      const t = (t1 > 0) ? t1 : ((t2 > 0) ? t2 : null);
-      if (t === null) continue;
-      if (t > maxDist) continue;
+      const t = (t1 > 0 ? t1 : (t2 > 0 ? t2 : null));
+      if (t === null || t > maxDist) continue;
 
       const hitY = origin.y + dir.y * t - z.y;
       if (hitY < 0 || hitY > z.h) continue;
 
       if (!best || t < best.t) best = { t, zombie: z, hitY };
     }
-
     return best;
   }
 
-  // ---------- DAMAGE / HITZONES ----------
-  function applyDamage(z, w, hitY){
-    const dmgMult = 1 + (state.upgrades.dmg ?? 0) * 0.10;
+  function applyDamage(z, w, hitY) {
+    const dmgMultLvl = 1 + (state.upgrades.dmg ?? 0) * 0.10;
+
     const rel = clamp(hitY / z.h, 0, 1);
-
     let zoneMult = 1.0;
-    if (rel > 0.80) zoneMult = 1.8;     // head
-    else if (rel < 0.28) zoneMult = 0.65;// legs
+    if (rel > 0.80) zoneMult = 1.8;
+    else if (rel < 0.28) zoneMult = 0.65;
 
-    const dmg = Math.max(1, Math.round(w.damage * dmgMult * zoneMult));
+    const base = w.damage * dmgMultLvl;
+    const dmg = Math.max(1, Math.round(base * zoneMult));
 
     z.hp -= dmg;
     z.hurtFlash = 0.10;
-
     playHitTick();
 
-    if (z.hp <= 0){
+    if (z.hp <= 0) {
       removeZombie(z);
       giveKillRewards();
     }
   }
 
-  // ---------- SHOOT ----------
-  function shoot(){
+  function knifeAttack() {
     if (state.paused) return;
-
-    if (state.equippedSlot === 3){
-      knifeAttack();
-      return;
-    }
-
-    const w = getCurrentWeapon();
-    if (!w) return;
-    if (state.reloading) return;
-
-    const now = performance.now() / 1000;
-    if (now - state.lastShotAt < w.fireDelay) return;
-
-    if (state.ammoInMag <= 0){
-      state.msg = "Click. Reload (R).";
-      return;
-    }
-
-    state.lastShotAt = now;
-    state.ammoInMag -= 1;
-
-    playGunPop();
-
-    const pellets = w.pellets ?? 1;
-    let hitAny = false;
-
-    for (let p = 0; p < pellets; p++){
-      const ax = (Math.random()*2 - 1) * w.spread * (pellets > 1 ? 1.2 : 1);
-      const ay = (Math.random()*2 - 1) * w.spread * (pellets > 1 ? 1.2 : 1);
-
-      const yaw = state.yaw + ax;
-      const pitch = state.pitch + ay;
-
-      const dir = {
-        x: Math.cos(pitch) * Math.cos(yaw),
-        y: Math.sin(pitch),
-        z: Math.cos(pitch) * Math.sin(yaw),
-      };
-
-      const origin = { x: state.px, y: 1.55 - state.crouch * 0.45, z: state.pz };
-      const hit = raycastZombie(origin, dir, w.range);
-
-      if (hit){
-        hitAny = true;
-        applyDamage(hit.zombie, w, hit.hitY);
-      }
-    }
-
-    state.hitmarker = hitAny ? 0.12 : 0;
-
-    if (state.ammoInMag === 0 && state.ammoReserve > 0){
-      state.msg = "Mag empty. Reload (R).";
-    }
-  }
-
-  function knifeAttack(){
-    const now = performance.now() / 1000;
+    const now = performance.now()/1000;
     if (now - state.lastShotAt < 0.35) return;
     state.lastShotAt = now;
 
     const origin = { x: state.px, y: 1.45 - state.crouch * 0.45, z: state.pz };
-    const dir = {
-      x: Math.cos(state.pitch) * Math.cos(state.yaw),
-      y: Math.sin(state.pitch),
-      z: Math.cos(state.pitch) * Math.sin(state.yaw),
-    };
+    const dir = { x: Math.cos(state.pitch)*Math.cos(state.yaw), y: Math.sin(state.pitch), z: Math.cos(state.pitch)*Math.sin(state.yaw) };
 
     const hit = raycastZombie(origin, dir, 2.0);
-    if (hit){
+    if (hit) {
       playHitTick();
       hit.zombie.hurtFlash = 0.12;
       hit.zombie.hp -= 35;
       state.hitmarker = 0.12;
-
-      if (hit.zombie.hp <= 0){
+      if (hit.zombie.hp <= 0) {
         removeZombie(hit.zombie);
         giveKillRewards();
       }
     }
   }
 
+  function shoot() {
+    if (state.paused) return;
+    if (state.equippedSlot === 3) { knifeAttack(); return; }
+
+    const w = getCurrentWeapon();
+    if (!w) return;
+    if (state.reloading) return;
+
+    const now = performance.now()/1000;
+    if (now - state.lastShotAt < w.fireDelay) return;
+
+    if (state.ammoInMag <= 0) { state.msg = "Click. Reload (R)."; return; }
+
+    state.lastShotAt = now;
+    state.ammoInMag -= 1;
+    playGunPop();
+
+    const origin = { x: state.px, y: 1.55 - state.crouch*0.45, z: state.pz };
+
+    const pellets = w.pellets ?? 1;
+    let hitAny = false;
+
+    for (let p=0;p<pellets;p++){
+      const ax = (Math.random()*2 - 1) * (w.spread * 1.2);
+      const ay = (Math.random()*2 - 1) * (w.spread * 1.2);
+
+      const yaw = state.yaw + ax;
+      const pitch = state.pitch + ay;
+
+      const dir = {
+        x: Math.cos(pitch)*Math.cos(yaw),
+        y: Math.sin(pitch),
+        z: Math.cos(pitch)*Math.sin(yaw),
+      };
+
+      const hit = raycastZombie(origin, dir, w.range);
+      if (hit) {
+        hitAny = true;
+        applyDamage(hit.zombie, w, hit.hitY);
+      }
+    }
+
+    state.hitmarker = hitAny ? 0.12 : 0;
+    if (state.ammoInMag === 0 && state.ammoReserve > 0) state.msg = "Mag empty. Reload (R).";
+  }
+
   // ---------- MOVEMENT ----------
-  function move(dt){
+  function move(dt) {
     if (state.paused) return;
 
     const sens = 0.0022;
     state.yaw += mx * sens;
-    state.pitch -= my * sens; // normal ✅ (your “reversed” is fixed here)
+    state.pitch -= my * sens; // normal FPS look
     state.pitch = clamp(state.pitch, -1.35, 1.35);
     mx = 0; my = 0;
 
@@ -722,23 +667,23 @@
     const spdMult = 1 + (state.upgrades.spd ?? 0) * 0.06;
     let speed = 3.2 * spdMult * (crouching ? 0.78 : 1);
 
-    let f = 0, s = 0;
+    let f=0, s=0;
     if (keys.has("KeyW")) f += 1;
     if (keys.has("KeyS")) f -= 1;
     if (keys.has("KeyA")) s -= 1;
     if (keys.has("KeyD")) s += 1;
 
-    const len = Math.hypot(f, s) || 1;
-    f /= len; s /= len;
+    const len = Math.hypot(f,s) || 1;
+    f/=len; s/=len;
 
     const sin = Math.sin(state.yaw);
     const cos = Math.cos(state.yaw);
 
-    const vx = (cos * f - sin * s) * speed;
-    const vz = (sin * f + cos * s) * speed;
+    const vx = (cos*f - sin*s) * speed;
+    const vz = (sin*f + cos*s) * speed;
 
     const onGround = state.py <= 0.0001;
-    if (onGround){
+    if (onGround) {
       state.py = 0;
       state.vy = Math.max(0, state.vy);
       if (keys.has("Space")) state.vy = 6.2;
@@ -746,45 +691,43 @@
       state.vy -= 16.0 * dt;
     }
 
-    const nx = state.px + vx * dt;
-    const nz = state.pz + vz * dt;
+    const nx = state.px + vx*dt;
+    const nz = state.pz + vz*dt;
 
     const rad = 0.20;
     if (!isWall(nx + rad, state.pz) && !isWall(nx - rad, state.pz)) state.px = nx;
     if (!isWall(state.px, nz + rad) && !isWall(state.px, nz - rad)) state.pz = nz;
 
     state.py += state.vy * dt;
-    if (state.py < 0){ state.py = 0; state.vy = 0; }
+    if (state.py < 0) { state.py = 0; state.vy = 0; }
   }
 
   // ---------- ZOMBIE AI ----------
-  function updateZombies(dt){
+  function updateZombies(dt) {
     if (state.paused) return;
 
-    for (const z of state.zombies){
+    for (const z of state.zombies) {
       z.groanAt -= dt;
-      if (z.groanAt <= 0){
-        if (Math.random() < 0.35) playZombieGroan();
-        z.groanAt = 2.0 + Math.random() * 3.0;
+      if (z.groanAt <= 0 && Math.random() < 0.02) {
+        playZombieGroan();
+        z.groanAt = 2.2 + Math.random() * 2.5;
       }
 
       const dx = state.px - z.x;
       const dz = state.pz - z.z;
       const dist = Math.hypot(dx, dz) || 1;
 
-      if (dist < 0.70 && state.hp > 0){
-        if (Math.random() < 0.35){
+      if (dist < 0.70 && state.hp > 0) {
+        if (Math.random() < 0.35) {
           state.hp -= 6 + state.wave;
           state.hp = clamp(state.hp, 0, state.maxHp);
-          state.msg = (state.hp <= 0)
-            ? "You died. Refresh to restart (save kept unless reset)."
-            : "Ouch!";
+          state.msg = state.hp <= 0 ? "You died. Refresh to restart (save kept unless reset)." : "Ouch!";
         }
       }
 
       const step = z.speed * dt;
-      const nx = z.x + (dx / dist) * step;
-      const nz = z.z + (dz / dist) * step;
+      const nx = z.x + (dx/dist)*step;
+      const nz = z.z + (dz/dist)*step;
 
       if (!isWall(nx, z.z)) z.x = nx;
       if (!isWall(z.x, nz)) z.z = nz;
@@ -793,12 +736,8 @@
     }
   }
 
-  // ---------- PROJECTION ----------
-  function project(wx, wy, wz){
-    const camX = state.px;
-    const camY = 1.55 + state.py - state.crouch * 0.45;
-    const camZ = state.pz;
-
+  // ---------- RENDER ----------
+  function projectWorldPoint(camX, camY, camZ, wx, wy, wz) {
     const dx = wx - camX;
     const dy = wy - camY;
     const dz = wz - camZ;
@@ -813,18 +752,17 @@
     const y2 = dy * cosP - z1 * sinP;
     const z2 = dy * sinP + z1 * cosP;
 
-    return { x:x1, y:y2, z:z2 };
+    return { x: x1, y: y2, z: z2 };
   }
 
-  // ---------- DRAW HELPERS ----------
-  function drawBillboard(wx, wy, wz, w, h, color, label){
-    const p = project(wx, wy + h/2, wz);
+  function drawBillboard(camX, camY, camZ, wx, wy, wz, w, h, color, label) {
+    const p = projectWorldPoint(camX, camY, camZ, wx, wy + h/2, wz);
     if (p.z <= 0.2) return;
 
     const W = innerWidth, H = innerHeight;
     const scale = 520 / p.z;
-    const sx = W/2 + p.x * scale;
-    const sy = H/2 - p.y * scale;
+    const sx = (W/2) + (p.x * scale);
+    const sy = (H/2) - (p.y * scale);
 
     const bw = w * scale;
     const bh = h * scale;
@@ -842,241 +780,243 @@
     ctx.fillText(label, sx - bw/2 + 8, sy - bh/2 + 16);
   }
 
-  function drawZombieBillboard(z){
-    const p = project(z.x, z.y + z.h/2, z.z);
+  function drawZombieBillboard(camX, camY, camZ, z) {
+    const p = projectWorldPoint(camX, camY, camZ, z.x, z.y + z.h/2, z.z);
     if (p.z <= 0.2) return;
 
     const W = innerWidth, H = innerHeight;
     const scale = 560 / p.z;
-    const sx = W/2 + p.x * scale;
-    const sy = H/2 - p.y * scale;
+    const sx = (W/2) + (p.x * scale);
+    const sy = (H/2) - (p.y * scale);
 
     const bw = 0.9 * scale;
     const bh = z.h * scale;
 
-    let bodyCol = "rgba(210,210,210,0.92)";
-    if (z.hurtFlash > 0) bodyCol = "rgba(255,120,120,0.95)";
+    let bodyCol = `rgba(210,210,210,0.92)`;
+    if (z.hurtFlash > 0) bodyCol = `rgba(255,120,120,0.95)`;
 
     ctx.fillStyle = bodyCol;
     ctx.fillRect(sx - bw/2, sy - bh/2 + 16, bw, bh - 16);
 
-    ctx.fillStyle = (z.hurtFlash > 0) ? "rgba(255,160,160,.95)" : "rgba(240,240,240,.92)";
+    ctx.fillStyle = z.hurtFlash > 0 ? "rgba(255,160,160,.95)" : "rgba(240,240,240,.92)";
     ctx.beginPath();
     ctx.arc(sx, sy - bh/2 + 28, 22, 0, Math.PI*2);
     ctx.fill();
 
     ctx.fillStyle = "rgba(30,30,30,.75)";
     ctx.fillRect(sx - 12, sy - bh/2 + 22, 8, 6);
-    ctx.fillRect(sx + 4,  sy - bh/2 + 22, 8, 6);
+    ctx.fillRect(sx + 4, sy - bh/2 + 22, 8, 6);
 
-    // legs on ground ✅
     ctx.fillStyle = "rgba(180,180,180,.92)";
     ctx.fillRect(sx - 22, sy + bh/2 - 32, 14, 32);
-    ctx.fillRect(sx + 8,  sy + bh/2 - 32, 14, 32);
+    ctx.fillRect(sx + 8, sy + bh/2 - 32, 14, 32);
 
-    const hpBase = (55 + state.wave * 8);
-    const hpPct = clamp(z.hp / hpBase, 0, 1);
+    const maxHp = (55 + state.wave * 8);
+    const hpPct = clamp(z.hp / maxHp, 0, 1);
     ctx.fillStyle = "rgba(0,0,0,.55)";
     ctx.fillRect(sx - bw/2, sy - bh/2 - 12, bw, 8);
     ctx.fillStyle = "rgba(34,197,94,.95)";
     ctx.fillRect(sx - bw/2, sy - bh/2 - 12, bw * hpPct, 8);
   }
 
-  // ✅ GUN ORIENTATION FIX: points toward screen center, not the sky
-  function drawWeaponModel(W, H){
+  function drawWeaponModel(W, H) {
+    // Bottom-right, pointing forward toward the center.
+    // "Forward" here means barrel aims toward the crosshair area.
     ctx.save();
 
-    const ax = W - 260;
-    const ay = H - 190;
+    const baseX = W - 260;
+    const baseY = H - 190;
     const bob = Math.sin(performance.now()/120) * 2;
-
-    ctx.translate(ax, ay + bob);
+    ctx.translate(baseX, baseY + bob);
 
     let model = "pistol";
     if (state.equippedSlot === 3) model = "knife";
     else model = getCurrentWeapon()?.model ?? "pistol";
 
-    // This angle makes barrel aim toward center (up-left), not up
-    ctx.rotate(-0.75);
+    // rotate so the barrel points up-left (toward screen center)
+    ctx.rotate(-0.72);
 
-    if (model === "knife"){
+    // hand
+    ctx.fillStyle = "rgba(255,200,120,.95)";
+    ctx.fillRect(-10, 90, 50, 70);
+
+    if (model === "knife") {
       ctx.fillStyle = "rgba(20,20,20,.9)";
-      ctx.fillRect(20, 60, 90, 18);
+      ctx.fillRect(35, 105, 85, 16);
       ctx.fillStyle = "rgba(220,220,220,.95)";
-      ctx.fillRect(100, 52, 120, 10);
-      ctx.fillRect(100, 66, 120, 6);
-      ctx.fillStyle = "rgba(255,200,120,.95)";
-      ctx.fillRect(0, 80, 40, 60);
+      ctx.fillRect(110, 96, 120, 10);
+      ctx.fillRect(110, 110, 120, 6);
       ctx.restore();
       return;
     }
 
-    const hand = "rgba(255,200,120,.95)";
-    const dark = "rgba(25,25,25,.92)";
-    const metal = "rgba(170,180,195,.95)";
-    const accent = "rgba(255,150,60,.95)";
+    // weapon body
+    ctx.fillStyle = "rgba(30,30,30,.95)";
+    ctx.fillRect(30, 70, 140, 40);
 
-    ctx.fillStyle = hand;
-    ctx.fillRect(-10, 70, 50, 70);
+    // slide/top
+    ctx.fillStyle = "rgba(90,90,90,.95)";
+    ctx.fillRect(40, 60, 150, 18);
 
-    ctx.fillStyle = dark;
-    ctx.fillRect(20, 85, 40, 70);
+    // barrel
+    ctx.fillStyle = "rgba(120,120,120,.95)";
+    ctx.fillRect(170, 66, 85, 10);
 
-    ctx.fillStyle = metal;
-    ctx.fillRect(40, 75, 140, 30);
+    // grip
+    ctx.fillStyle = "rgba(25,25,25,.95)";
+    ctx.fillRect(65, 105, 45, 60);
 
-    ctx.fillStyle = "rgba(120,130,145,.95)";
-    ctx.fillRect(170, 80, 90, 18);
-
-    ctx.fillStyle = accent;
-    ctx.fillRect(250, 84, 12, 10);
-
-    if (model === "smg"){
-      ctx.fillStyle = metal;
-      ctx.fillRect(70, 105, 80, 16);
-      ctx.fillStyle = dark;
-      ctx.fillRect(120, 120, 22, 38);
-    }
-
-    if (model === "shotgun"){
-      ctx.fillStyle = metal;
-      ctx.fillRect(60, 68, 170, 14);
-      ctx.fillStyle = dark;
-      ctx.fillRect(95, 62, 60, 10);
+    // different silhouette per gun
+    if (model === "smg") {
+      ctx.fillStyle = "rgba(25,25,25,.95)";
+      ctx.fillRect(115, 95, 25, 60); // mag
+      ctx.fillStyle = "rgba(120,120,120,.95)";
+      ctx.fillRect(200, 60, 115, 10); // longer barrel
+    } else if (model === "shotgun") {
+      ctx.fillStyle = "rgba(120,120,120,.95)";
+      ctx.fillRect(180, 66, 170, 12); // long barrel
+      ctx.fillStyle = "rgba(70,70,70,.95)";
+      ctx.fillRect(25, 62, 70, 12); // stock chunk
     }
 
     ctx.restore();
   }
 
-  // ---------- MINIMAP ----------
-  function drawMinimap(){
+  function drawMinimap() {
     const w = minimap.width, h = minimap.height;
-    mctx.clearRect(0, 0, w, h);
+    mctx.clearRect(0,0,w,h);
 
+    // background
     mctx.fillStyle = "rgba(0,0,0,.35)";
-    mctx.fillRect(0, 0, w, h);
+    mctx.fillRect(0,0,w,h);
 
-    const scale = 10;
-    const ox = (w - MAP_W * scale) / 2;
-    const oy = (h - MAP_H * scale) / 2;
+    // map
+    const cellW = w / MAP_W;
+    const cellH = h / MAP_H;
 
-    for (let z = 0; z < MAP_H; z++){
-      for (let x = 0; x < MAP_W; x++){
-        if (map[z][x] === 1){
-          mctx.fillStyle = "rgba(255,255,255,.20)";
-          mctx.fillRect(ox + x*scale, oy + z*scale, scale, scale);
+    for (let z=0; z<MAP_H; z++){
+      for (let x=0; x<MAP_W; x++){
+        if (map[z][x] === 1) {
+          mctx.fillStyle = "rgba(255,255,255,.12)";
+          mctx.fillRect(x*cellW, z*cellH, cellW, cellH);
         }
       }
     }
 
+    // shop
     mctx.fillStyle = "rgba(34,197,94,.9)";
-    mctx.fillRect(ox + state.shopX*scale - 2, oy + state.shopZ*scale - 2, 4, 4);
+    mctx.fillRect(state.shopX*cellW - 2, state.shopZ*cellH - 2, 4, 4);
 
-    mctx.fillStyle = "rgba(255,90,90,.9)";
-    for (const z of state.zombies){
-      mctx.fillRect(ox + z.x*scale - 2, oy + z.z*scale - 2, 4, 4);
+    // zombies
+    mctx.fillStyle = "rgba(255,80,80,.9)";
+    for (const zb of state.zombies) {
+      mctx.fillRect(zb.x*cellW - 2, zb.z*cellH - 2, 4, 4);
     }
 
-    mctx.fillStyle = "rgba(120,200,255,.95)";
-    mctx.fillRect(ox + state.px*scale - 2, oy + state.pz*scale - 2, 4, 4);
-
-    mctx.strokeStyle = "rgba(120,200,255,.8)";
+    // player
+    mctx.fillStyle = "rgba(255,255,255,.95)";
     mctx.beginPath();
-    mctx.moveTo(ox + state.px*scale, oy + state.pz*scale);
-    mctx.lineTo(
-      ox + (state.px + Math.cos(state.yaw)*0.9)*scale,
-      oy + (state.pz + Math.sin(state.yaw)*0.9)*scale
-    );
+    mctx.arc(state.px*cellW, state.pz*cellH, 3, 0, Math.PI*2);
+    mctx.fill();
+
+    // facing line
+    mctx.strokeStyle = "rgba(255,255,255,.8)";
+    mctx.beginPath();
+    mctx.moveTo(state.px*cellW, state.pz*cellH);
+    mctx.lineTo((state.px + Math.cos(state.yaw)*0.7)*cellW, (state.pz + Math.sin(state.yaw)*0.7)*cellH);
     mctx.stroke();
   }
 
-  // ---------- HUD ----------
-  function updateHUD(){
+  function updateHUD() {
     hpPill.textContent = `HP: ${state.hp}/${state.maxHp}`;
     cashPill.textContent = `Cash: $${state.cash}`;
     wavePill.textContent = `Wave: ${state.wave}`;
     lvlPill.textContent = `Lv: ${state.level} (${state.xp} XP)`;
     msgPill.textContent = state.msg;
 
-    if (state.equippedSlot === 3){
-      wepPill.textContent = "Weapon: Knife";
-      ammoPill.textContent = "Ammo: —";
+    if (state.equippedSlot === 3) {
+      wepPill.textContent = `Weapon: Knife`;
+      ammoPill.textContent = `Ammo: —`;
     } else {
       const w = getCurrentWeapon();
       wepPill.textContent = `Weapon: ${w ? w.name : "None"}`;
-      ammoPill.textContent = `Ammo: ${state.ammoInMag}/${w?.mag ?? 0} | Reserve: ${state.ammoReserve}`;
+      ammoPill.textContent = `Ammo: ${state.ammoInMag}/${w ? w.mag : 0} | Reserve: ${state.ammoReserve}`;
     }
   }
 
-  // ---------- RENDER ----------
-  function render(){
+  function render() {
     const W = innerWidth, H = innerHeight;
 
+    ctx.fillStyle = "#0b0f14";
+    ctx.fillRect(0, 0, W, H);
+
+    // sky/floor
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, W, H/2);
     ctx.fillStyle = "#070a0f";
     ctx.fillRect(0, H/2, W, H/2);
 
+    // basic walls
     const fov = 1.05;
     const halfFov = fov / 2;
+
+    const camX = state.px;
+    const camY = 1.55 + state.py - state.crouch*0.45;
+    const camZ = state.pz;
+
     const cols = Math.floor(W / 2);
+    for (let i=0;i<cols;i++){
+      const x = i/(cols-1);
+      const angle = (state.yaw - halfFov) + x*fov;
 
-    for (let i = 0; i < cols; i++){
-      const x = i / (cols - 1);
-      const angle = state.yaw - halfFov + x * fov;
+      let rx=camX, rz=camZ;
+      const step=0.03;
+      let dist=0, hit=false;
 
-      let rx = state.px;
-      let rz = state.pz;
-
-      const step = 0.03;
-      let dist = 0;
-      let hit = false;
-
-      for (let t = 0; t < 1200; t++){
-        rx += Math.cos(angle) * step;
-        rz += Math.sin(angle) * step;
+      for (let t=0;t<1200;t++){
+        rx += Math.cos(angle)*step;
+        rz += Math.sin(angle)*step;
         dist += step;
-        if (isWall(rx, rz)){ hit = true; break; }
-        if (dist > 40) break;
+        if (isWall(rx,rz)) { hit=true; break; }
+        if (dist>40) break;
       }
-
       if (!hit) continue;
 
-      const corrected = dist * Math.cos(angle - state.yaw);
-      const wallH = (H * 1.12) / Math.max(0.0001, corrected);
-      const top = H/2 - wallH/2 + state.pitch * 120;
-      const colW = W / cols + 1;
+      const corrected = dist*Math.cos(angle-state.yaw);
+      const wallH = (H*1.12)/Math.max(0.0001, corrected);
+      const top = (H/2) - wallH/2 + (state.pitch*120);
+      const colW = W/cols + 1;
 
-      const shade = clamp(1 - corrected / 22, 0.12, 1);
-      const base = (235 * shade) | 0;
-      ctx.fillStyle = `rgb(${base},${base},${base})`;
-      ctx.fillRect(i * (W / cols), top, colW, wallH);
+      const shade = clamp(1 - corrected/22, 0.12, 1);
+      const base = 235*shade;
+      ctx.fillStyle = `rgb(${base|0},${base|0},${base|0})`;
+      ctx.fillRect(i*(W/cols), top, colW, wallH);
     }
 
-    drawBillboard(state.shopX, 0, state.shopZ, 1.2, 1.4, "#22c55e", "SHOP");
+    // shop + zombies
+    drawBillboard(camX, camY, camZ, state.shopX, 0, state.shopZ, 1.2, 1.4, "#22c55e", "SHOP");
+    for (const z of state.zombies) drawZombieBillboard(camX, camY, camZ, z);
 
-    for (const z of state.zombies) drawZombieBillboard(z);
-
-    // crosshair + hitmarker
+    // crosshair
     ctx.save();
     ctx.translate(W/2, H/2);
     ctx.strokeStyle = "rgba(255,255,255,.8)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-8,0); ctx.lineTo(-2,0);
-    ctx.moveTo(8,0);  ctx.lineTo(2,0);
-    ctx.moveTo(0,-8); ctx.lineTo(0,-2);
-    ctx.moveTo(0,8);  ctx.lineTo(0,2);
+    ctx.moveTo(-8, 0); ctx.lineTo(-2, 0);
+    ctx.moveTo(8, 0); ctx.lineTo(2, 0);
+    ctx.moveTo(0, -8); ctx.lineTo(0, -2);
+    ctx.moveTo(0, 8); ctx.lineTo(0, 2);
     ctx.stroke();
 
-    if (state.hitmarker > 0){
+    if (state.hitmarker > 0) {
       ctx.strokeStyle = "rgba(34,197,94,.95)";
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(-14,-14); ctx.lineTo(-6,-6);
-      ctx.moveTo(14,-14);  ctx.lineTo(6,-6);
-      ctx.moveTo(-14,14);  ctx.lineTo(-6,6);
-      ctx.moveTo(14,14);   ctx.lineTo(6,6);
+      ctx.moveTo(14,-14); ctx.lineTo(6,-6);
+      ctx.moveTo(-14,14); ctx.lineTo(-6,6);
+      ctx.moveTo(14,14); ctx.lineTo(6,6);
       ctx.stroke();
     }
     ctx.restore();
@@ -1090,19 +1030,21 @@
     drawMinimap();
   }
 
-  // ---------- LOOP ----------
+  // ---------- GAME LOOP ----------
   let last = performance.now();
-  function tick(now){
-    const dt = clamp((now - last) / 1000, 0, 0.033);
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-
-    if (state.hitmarker > 0) state.hitmarker = Math.max(0, state.hitmarker - dt);
 
     move(dt);
     updateZombies(dt);
-    render();
 
+    // fades
+    state.hitmarker = Math.max(0, state.hitmarker - dt);
+
+    render();
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+
 })();
