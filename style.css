@@ -34,7 +34,7 @@ html,body{
 
 #hud .row{
   display:flex;
-  gap:14px;
+  gap:10px;
   flex-wrap:wrap;
   align-items:center;
 }
@@ -48,15 +48,12 @@ html,body{
 .pill{
   padding:6px 10px;
   border-radius:999px;
-  background:rgba(17,24,39,.7);
+  background:rgba(17,24,39,.72);
   border:1px solid rgba(255,255,255,.08);
   min-height:28px;
 }
 
-/* IMPORTANT: this must be EXACT, including !important */
-.hidden{
-  display:none !important;
-}
+.hidden{ display:none !important; }
 
 .overlay{
   position:fixed;
@@ -69,8 +66,8 @@ html,body{
 }
 
 .panel{
-  width:min(520px, 92vw);
-  background:rgba(17,24,39,.95);
+  width:min(620px, 92vw);
+  background:rgba(17,24,39,.96);
   border:1px solid rgba(255,255,255,.08);
   border-radius:14px;
   padding:18px;
@@ -78,11 +75,7 @@ html,body{
 }
 
 .panel h2{ margin:0 0 6px 0; }
-
-.muted{
-  color:var(--muted);
-  margin:0 0 14px 0;
-}
+.muted{ color:var(--muted); margin:0 0 14px 0; }
 
 .shop-grid{
   display:grid;
@@ -104,25 +97,17 @@ html,body{
   gap:4px 10px;
 }
 
-.shop-btn:hover{
-  border-color:rgba(34,197,94,.35);
-}
+.shop-btn:hover{ border-color:rgba(34,197,94,.35); }
 
 .shop-btn .title{ font-weight:900; }
+.shop-btn .desc{ color:var(--muted); font-size:13px; grid-column:1 / 2; }
+.shop-btn .price{ color:var(--accent); font-weight:900; grid-column:2 / 3; grid-row:1 / 3; align-self:center; }
 
-.shop-btn .desc{
-  color:var(--muted);
-  font-size:13px;
-  grid-column:1 / 2;
+.shop-btn.locked{
+  opacity:.55;
+  filter:saturate(.65);
 }
-
-.shop-btn .price{
-  color:var(--accent);
-  font-weight:900;
-  grid-column:2 / 3;
-  grid-row:1 / 3;
-  align-self:center;
-}
+.shop-btn.locked:hover{ border-color:rgba(255,255,255,.10); }
 
 .footer{
   display:flex;
@@ -138,7 +123,4 @@ button{
   color:var(--text);
   padding:10px 12px;
 }
-
-button:hover{
-  border-color:rgba(255,255,255,.25);
-}
+button:hover{ border-color:rgba(255,255,255,.25); }
