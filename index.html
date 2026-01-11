@@ -9,7 +9,6 @@
 <body>
   <canvas id="game"></canvas>
 
-  <!-- HUD -->
   <div id="hud">
     <div class="row">
       <div class="pill" id="hpPill">HP: 100</div>
@@ -19,6 +18,7 @@
       <div class="pill" id="wavePill">Wave: 1</div>
       <div class="pill" id="lvlPill">Lv: 1 (0 XP)</div>
     </div>
+
     <div class="row small">
       <div class="pill help" id="helpPill">
         Click to lock mouse | WASD move | Mouse look | Space jump | Ctrl crouch | R reload |
@@ -28,13 +28,10 @@
     </div>
   </div>
 
-  <!-- Minimap -->
   <canvas id="minimap" width="180" height="180" aria-label="minimap"></canvas>
 
-  <!-- Shop Prompt -->
   <div id="shopPrompt" class="floatingPrompt hidden">Press <b>Q</b> to open Shop</div>
 
-  <!-- Shop Overlay -->
   <div id="overlay" class="overlay hidden">
     <div class="panel">
       <div class="panelHeader">
