@@ -18,12 +18,30 @@
     </div>
 
     <div class="row small">
-      <div>Click to play | Move <b>WASD</b> | Reload <b>R</b> | Shop <b>Q</b> at kiosk | Switch <b>1</b>/<b>2</b> | Knife <b>3</b></div>
+      <div id="controlsLine">Click to play | Move <b>WASD</b> | Reload <b>R</b> | Shop <b>Q</b> | Perks <b>E</b> | Switch <b>1</b>/<b>2</b> | Knife <b>3</b></div>
       <div class="pill" id="hint">Loading…</div>
+    </div>
+
+    <div class="row small">
+      <div class="stam">
+        <div class="stamLabel">Stamina</div>
+        <div class="stamBar"><div id="stamFill"></div></div>
+      </div>
+      <div class="pill subtle">Chasers: <span id="chasers">0</span>/4</div>
     </div>
   </div>
 
   <canvas id="game"></canvas>
+
+  <!-- Mobile controls (shown only in mobile mode) -->
+  <div id="mobileUI" class="mobile-ui hidden">
+    <div id="joyBase" class="joy-base">
+      <div id="joyStick" class="joy-stick"></div>
+    </div>
+
+    <button id="btnReload" class="m-btn m-reload">RELOAD</button>
+    <button id="btnUse" class="m-btn m-use hidden">USE</button>
+  </div>
 
   <div id="shop" class="overlay hidden">
     <div class="panel">
