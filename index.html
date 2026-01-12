@@ -9,16 +9,17 @@
 <body>
   <div id="hud">
     <div class="row">
-      <div class="pill"><b>HP</b>: <span id="hp">100</span></div>
+      <div class="pill"><b>HP</b>: <span id="hp">100</span>/<span id="hpMax">100</span></div>
+      <div class="pill"><b>Armor</b>: <span id="armor">0</span></div>
       <div class="pill"><b>Weapon</b>: <span id="weapon">Rusty Pistol</span></div>
       <div class="pill"><b>Ammo</b>: <span id="ammo">8</span>/<span id="mag">8</span> | <b>Reserve</b>: <span id="reserve">32</span></div>
       <div class="pill"><b>Cash</b>: $<span id="cash">0</span></div>
-      <div class="pill"><b>Wave</b>: <span id="wave">1</span></div>
+      <div class="pill"><b>Round</b>: <span id="round">1</span> (<span id="alive">0</span> alive)</div>
       <div class="pill"><b>Lv</b>: <span id="level">1</span> (<span id="xp">0</span> XP)</div>
     </div>
 
     <div class="row small">
-      <div id="controlsLine">Click to play | Move <b>WASD</b> | Reload <b>R</b> | Shop <b>Q</b> | Perks <b>E</b> | Switch <b>1</b>/<b>2</b> | Knife <b>3</b></div>
+      <div id="controlsLine">Click to play | Move <b>WASD</b> | Reload <b>R</b> | Shop <b>Q</b> | Use/Buy <b>E</b> | Sprint <b>Shift</b></div>
       <div class="pill" id="hint">Loading…</div>
     </div>
 
@@ -27,7 +28,11 @@
         <div class="stamLabel">Stamina</div>
         <div class="stamBar"><div id="stamFill"></div></div>
       </div>
+
       <div class="pill subtle">Chasers: <span id="chasers">0</span>/4</div>
+      <div class="pill subtle">Scrap: <span id="scrap">0</span> | Essence: <span id="essence">0</span></div>
+
+      <button id="btnSettings" class="hudBtn" title="Settings">⚙</button>
     </div>
   </div>
 
@@ -43,10 +48,11 @@
     <button id="btnUse" class="m-btn m-use hidden">USE</button>
   </div>
 
+  <!-- SHOP -->
   <div id="shop" class="overlay hidden">
     <div class="panel">
-      <h2>Weapon Shop</h2>
-      <p class="muted">Walk up to the kiosk, press <b>Q</b>. Game pauses while shopping.</p>
+      <h2>Shop Kiosk</h2>
+      <p class="muted">Walk up to the green kiosk and press <b>Q</b>. Game pauses while shopping.</p>
       <div class="shop-grid" id="shopList"></div>
       <div class="footer">
         <button id="closeShop">Close (Q / ESC)</button>
@@ -54,10 +60,65 @@
     </div>
   </div>
 
+  <!-- ARMOR STATION -->
+  <div id="armorMenu" class="overlay hidden">
+    <div class="panel">
+      <h2>Armor Station</h2>
+      <p class="muted">Craft armor with <b>Scrap</b> + <b>Essence</b>, equip pieces, and upgrade rarity.</p>
+      <div class="shop-grid" id="armorList"></div>
+      <div class="footer">
+        <button id="closeArmor">Close (E / ESC)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="settingsMenu" class="overlay hidden">
+    <div class="panel">
+      <h2>Settings</h2>
+      <p class="muted">Input Mode saves automatically.</p>
+
+      <div class="settingsGrid">
+        <div class="setRow">
+          <div class="setLabel">Input Mode</div>
+          <select id="inputMode">
+            <option value="auto">Auto</option>
+            <option value="pc">PC</option>
+            <option value="mobile">Mobile</option>
+          </select>
+        </div>
+
+        <div class="setRow">
+          <div class="setLabel">Look Sensitivity</div>
+          <input id="sens" type="range" min="0.6" max="2.5" step="0.05" />
+          <div class="setTiny"><span id="sensVal">1.00</span>x</div>
+        </div>
+
+        <div class="setRow">
+          <div class="setLabel">Mobile Auto-Sprint (stick hard)</div>
+          <label class="toggle">
+            <input id="autoSprint" type="checkbox" />
+            <span class="toggleUi"></span>
+          </label>
+        </div>
+
+        <div class="setRow">
+          <div class="setLabel">Reset Save</div>
+          <button id="btnReset" class="danger">Reset Progress</button>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button id="closeSettings">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEATH -->
   <div id="death" class="overlay hidden">
     <div class="panel">
       <h2>You died 🧟</h2>
-      <p class="muted">Progress is saved. Wave pressure resets.</p>
+      <p class="muted">Progress is saved. Round restarts, you keep your grind.</p>
       <button id="restart">Restart</button>
     </div>
   </div>
