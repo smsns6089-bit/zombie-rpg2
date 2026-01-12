@@ -20,12 +20,6 @@
 (() => {
   "use strict";
 
-  // ---------- Safe clone (structuredClone fallback) ----------
-  const clone = (obj) => {
-    if (typeof structuredClone === "function") return structuredClone(obj);
-    return JSON.parse(JSON.stringify(obj));
-  };
-
   // ---------- Canvas ----------
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
@@ -288,22 +282,11 @@
   touchHint.textContent = "Drag to aim • Tap to fire";
   document.body.appendChild(touchHint);
 
-  // ---------- GAME STATE ----------
-  const game = {
-    mode: "play",            // "play" | "shop" | "dead" | "settings"
-    pointerLocked: false,
-    wave: 1,
-    t: 0,
-    recoil: 0,
-    muzzle: 0,
-    flow: null,
-    flowTimer: 0,
-  };
-
   function openSettings() {
     settingsOverlay.style.display = "flex";
     syncSettingsUI();
     setHint("Settings open (paused).", true);
+    // pause like shop
     if (game.mode === "play") game.mode = "settings";
     document.exitPointerLock?.();
   }
@@ -324,6 +307,7 @@
     el("pgm_invert_y").value = String(!!settings.invertY);
     el("pgm_audio").value = String(!!settings.audioEnabled);
 
+    // pick closest sens option
     const options = ["0.0032", "0.0042", "0.0054", "0.0066"];
     const best = options.reduce((acc, v) => {
       const dv = Math.abs(parseFloat(v) - settings.sensX);
@@ -332,6 +316,69 @@
     }, "0.0042");
     el("pgm_sens").value = best;
   }
+
+  function applySettings() {
+    const modeNow = effectiveInputMode();
+    // show/hide fire button
+    const showFire = (modeNow === "mobile" && settings.mobileShowFireBtn);
+    fireBtn.style.display = showFire ? "block" : "none";
+
+    // show hint for mobile briefly
+    if (modeNow === "mobile") {
+      touchHint.style.opacity = "1";
+      clearTimeout(applySettings._t);
+      applySettings._t = setTimeout(() => { touchHint.style.opacity = "0"; }, 2200);
+    } else {
+      touchHint.style.opacity = "0";
+    }
+
+    // keep sens in sync
+    settings.sensX = clamp(settings.sensX, 0.0015, 0.02);
+    settings.sensY = clamp(settings.sensY, 0.0015, 0.02);
+
+    // audio toggle
+    audio.enabled = !!settings.audioEnabled;
+
+    saveSettings();
+  }
+
+  settingsBtn.addEventListener("click", openSettings);
+  settingsOverlay.addEventListener("click", (e) => {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+  el("pgm_close_settings").addEventListener("click", closeSettings);
+
+  // Save changes live
+  el("pgm_input_mode").addEventListener("change", (e) => {
+    settings.inputMode = e.target.value;
+    applySettings();
+  });
+  el("pgm_tap_fire").addEventListener("change", (e) => {
+    settings.mobileTapToFire = (e.target.value === "true");
+    applySettings();
+  });
+  el("pgm_fire_btn_toggle").addEventListener("change", (e) => {
+    settings.mobileShowFireBtn = (e.target.value === "true");
+    applySettings();
+  });
+  el("pgm_right_aim").addEventListener("change", (e) => {
+    settings.mobileRightSideAim = (e.target.value === "true");
+    applySettings();
+  });
+  el("pgm_sens").addEventListener("change", (e) => {
+    const v = parseFloat(e.target.value);
+    settings.sensX = v;
+    settings.sensY = v;
+    applySettings();
+  });
+  el("pgm_invert_y").addEventListener("change", (e) => {
+    settings.invertY = (e.target.value === "true");
+    applySettings();
+  });
+  el("pgm_audio").addEventListener("change", (e) => {
+    settings.audioEnabled = (e.target.value === "true");
+    applySettings();
+  });
 
   // ---------- AUDIO ----------
   // Uses: synth for gun/hit + your mp3 for groan (zombie_groan.mp3)
@@ -360,6 +407,7 @@
     ensureAudio();
     if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume().catch(()=>{});
     if (groanAudio) {
+      // unlock on iOS
       try {
         const v = groanAudio.volume;
         groanAudio.volume = 0.0001;
@@ -444,71 +492,24 @@
     } catch {}
   }
 
-  function applySettings() {
-    const modeNow = effectiveInputMode();
-
-    const showFire = (modeNow === "mobile" && settings.mobileShowFireBtn);
-    fireBtn.style.display = showFire ? "block" : "none";
-
-    if (modeNow === "mobile") {
-      touchHint.style.opacity = "1";
-      clearTimeout(applySettings._t);
-      applySettings._t = setTimeout(() => { touchHint.style.opacity = "0"; }, 2200);
-    } else {
-      touchHint.style.opacity = "0";
-    }
-
-    settings.sensX = clamp(settings.sensX, 0.0015, 0.02);
-    settings.sensY = clamp(settings.sensY, 0.0015, 0.02);
-
-    audio.enabled = !!settings.audioEnabled;
-
-    saveSettings();
-  }
-
-  settingsBtn.addEventListener("click", openSettings);
-  settingsOverlay.addEventListener("click", (e) => {
-    if (e.target === settingsOverlay) closeSettings();
-  });
-  el("pgm_close_settings").addEventListener("click", closeSettings);
-
-  el("pgm_input_mode").addEventListener("change", (e) => {
-    settings.inputMode = e.target.value;
-    applySettings();
-  });
-  el("pgm_tap_fire").addEventListener("change", (e) => {
-    settings.mobileTapToFire = (e.target.value === "true");
-    applySettings();
-  });
-  el("pgm_fire_btn_toggle").addEventListener("change", (e) => {
-    settings.mobileShowFireBtn = (e.target.value === "true");
-    applySettings();
-  });
-  el("pgm_right_aim").addEventListener("change", (e) => {
-    settings.mobileRightSideAim = (e.target.value === "true");
-    applySettings();
-  });
-  el("pgm_sens").addEventListener("change", (e) => {
-    const v = parseFloat(e.target.value);
-    settings.sensX = v;
-    settings.sensY = v;
-    applySettings();
-  });
-  el("pgm_invert_y").addEventListener("change", (e) => {
-    settings.invertY = (e.target.value === "true");
-    applySettings();
-  });
-  el("pgm_audio").addEventListener("change", (e) => {
-    settings.audioEnabled = (e.target.value === "true");
-    applySettings();
-  });
-
   // ---------- SAVE ----------
   const SAVE_KEY = "pgm_zombie_rpg_save_v4";
 
   function xpToNext(level) {
     return Math.floor(70 + (level - 1) * 45 + Math.pow(level - 1, 1.25) * 20);
   }
+
+  // ---------- GAME STATE ----------
+  const game = {
+    mode: "play",            // "play" | "shop" | "dead" | "settings"
+    pointerLocked: false,
+    wave: 1,
+    t: 0,
+    recoil: 0,
+    muzzle: 0,
+    flow: null,
+    flowTimer: 0,
+  };
 
   // ---------- MAP ----------
   const world = {
@@ -627,7 +628,7 @@
     level: 1,
     xp: 0,
 
-    slots: [ clone(W("pistol_rusty")), null ],
+    slots: [ structuredClone(W("pistol_rusty")), null ],
     activeSlot: 0,
     usingKnife: false,
 
@@ -725,7 +726,7 @@
       player.xp = data.xp ?? 0;
 
       const ids = Array.isArray(data.slotIds) ? data.slotIds : ["pistol_rusty", null];
-      player.slots = ids.map(id => (id ? clone(W(id)) : null));
+      player.slots = ids.map(id => (id ? structuredClone(W(id)) : null));
 
       const ws = data.weaponState || {};
       for (const w of player.slots) {
@@ -845,7 +846,7 @@
     return { ok:true, why:"Buy" };
   }
   function giveWeapon(id) {
-    const w = clone(W(id));
+    const w = structuredClone(W(id));
     player.slots[1] = w;
     setHint(`Bought: ${w.name}. Slot 2 (press 2).`, true);
     saveGame();
@@ -1171,6 +1172,7 @@
     if (game.mode !== "play") return;
 
     const modeNow = effectiveInputMode();
+    // PC requires pointer lock. Mobile does not.
     if (modeNow === "pc" && !game.pointerLocked) return;
 
     if (player.usingKnife) return knifeAttack();
@@ -1215,6 +1217,7 @@
       if (hitZ) {
         didHit = true;
 
+        // hitzones based on crosshair Y against projected sprite
         const hgt = innerHeight;
         const horizon = (hgt / 2) + (player.pitch * (hgt * 0.35));
         const spriteSize = clamp((hgt * 0.90) / (dist(player.x, player.y, hitZ.x, hitZ.y) + 0.001), 12, hgt * 1.25);
@@ -1571,11 +1574,8 @@
       const rayD = castRay(player.a + ang);
       if (rayD + 0.05 < distTo) continue;
 
-      const w2 = innerWidth, h2 = innerHeight;
-      const horizon2 = (h2 / 2) + (player.pitch * (h2 * 0.35));
-
-      const screenX = (ang / (player.fov / 2)) * (w2 / 2) + (w2 / 2);
-      const size = clamp((h2 * 0.90) / (distTo + 0.001), 12, h2 * 1.25);
+      const screenX = (ang / (player.fov / 2)) * (w / 2) + (w / 2);
+      const size = clamp((h * 0.90) / (distTo + 0.001), 12, h * 1.25);
 
       let col = "rgba(34,197,94,.9)";
       let label = "$";
@@ -1585,12 +1585,12 @@
 
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.arc(screenX, horizon2 + size * 0.10, Math.max(6, size * 0.09), 0, Math.PI * 2);
+      ctx.arc(screenX, horizon + size * 0.10, Math.max(6, size * 0.09), 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = "rgba(0,0,0,.55)";
       ctx.font = "bold 14px system-ui";
-      ctx.fillText(label, screenX - 5, horizon2 + size * 0.10 + 5);
+      ctx.fillText(label, screenX - 5, horizon + size * 0.10 + 5);
     }
 
     // crosshair
@@ -1729,7 +1729,6 @@
     player.a += dx * settings.sensX;
 
     const yDir = settings.invertY ? 1 : -1;
-    // dy is screen-space. dragging up is negative dy, should look up => pitch increases in our horizon math.
     player.pitch = clamp(player.pitch + yDir * (-dy * settings.sensY), -0.9, 0.9);
   }
 
@@ -2050,6 +2049,15 @@
     // kiosk hint
     if (nearShopKiosk()) setHint("At SHOP kiosk: press Q.", true);
   }
+
+  // ---------- Misc ----------
+  // Esc closes settings/shop
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (game.mode === "shop") closeShop();
+      if (game.mode === "settings") closeSettings();
+    }
+  });
 
   // Apply settings now
   applySettings();
