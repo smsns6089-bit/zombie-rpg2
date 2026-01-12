@@ -1,9 +1,13 @@
-// Project Game Maker: Zombie RPG FPS (Raycast) - FULL REWRITE v4
-// - Better zombie animation (no images)
+// Project Game Maker: Zombie RPG FPS (Raycast) - FULL REWRITE v5
+// - Round-based zombies
+// - Only 4 global chasers hunt you; others wander
+// - Scraps + Essence drops (NO armor drops)
+// - Armor Station: craft/equip/upgrade armor (grindy)
 // - COD-style Perk Machines
-// - Only 4 "chasers" hunt you globally; others wander
-// - Mobile mode: left joystick + reload button, tap to shoot, drag to look
-// - GitHub Pages friendly. No libraries.
+// - Settings button (top-right): Input Mode Auto/PC/Mobile (saved), sensitivity, mobile auto-sprint
+// - Mobile: left joystick + reload button, right drag look, right tap shoots
+// - Visible bullet projectiles (tiny dark balls) with long range + proper hit detection
+// GitHub Pages friendly. No libraries.
 
 (() => {
   "use strict";
@@ -15,23 +19,44 @@
   // ---------- UI ----------
   const ui = {
     hp: document.getElementById("hp"),
+    hpMax: document.getElementById("hpMax"),
+    armor: document.getElementById("armor"),
     weapon: document.getElementById("weapon"),
     ammo: document.getElementById("ammo"),
     mag: document.getElementById("mag"),
     reserve: document.getElementById("reserve"),
     cash: document.getElementById("cash"),
-    wave: document.getElementById("wave"),
+    round: document.getElementById("round"),
+    alive: document.getElementById("alive"),
     level: document.getElementById("level"),
     xp: document.getElementById("xp"),
     hint: document.getElementById("hint"),
+    controlsLine: document.getElementById("controlsLine"),
+    stamFill: document.getElementById("stamFill"),
+    chasers: document.getElementById("chasers"),
+    scrap: document.getElementById("scrap"),
+    essence: document.getElementById("essence"),
+
+    btnSettings: document.getElementById("btnSettings"),
+
     shop: document.getElementById("shop"),
     shopList: document.getElementById("shopList"),
     closeShop: document.getElementById("closeShop"),
+
+    armorMenu: document.getElementById("armorMenu"),
+    armorList: document.getElementById("armorList"),
+    closeArmor: document.getElementById("closeArmor"),
+
+    settingsMenu: document.getElementById("settingsMenu"),
+    closeSettings: document.getElementById("closeSettings"),
+    inputMode: document.getElementById("inputMode"),
+    sens: document.getElementById("sens"),
+    sensVal: document.getElementById("sensVal"),
+    autoSprint: document.getElementById("autoSprint"),
+    btnReset: document.getElementById("btnReset"),
+
     death: document.getElementById("death"),
     restart: document.getElementById("restart"),
-    stamFill: document.getElementById("stamFill"),
-    chasers: document.getElementById("chasers"),
-    controlsLine: document.getElementById("controlsLine"),
 
     mobileUI: document.getElementById("mobileUI"),
     joyBase: document.getElementById("joyBase"),
@@ -66,23 +91,68 @@
     ui.hint.style.borderColor = ok ? "rgba(34,197,94,.35)" : "rgba(255,255,255,.08)";
   }
 
-  // ---------- Mobile Detect ----------
-  const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+  // ---------- SETTINGS (saved) ----------
+  const SAVE_KEY = "pgm_zombie_rpg_save_v5";
+  const SETTINGS_KEY = "pgm_zombie_rpg_settings_v5";
+
+  const isTouchDevice = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+
+  const settings = {
+    inputMode: "auto", // auto | pc | mobile
+    sens: 1.0,         // look sensitivity multiplier
+    autoSprint: true,  // mobile: stick hard -> sprint
+  };
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && typeof s === "object") {
+          settings.inputMode = s.inputMode ?? settings.inputMode;
+          settings.sens = clamp(Number(s.sens ?? settings.sens), 0.6, 2.5);
+          settings.autoSprint = !!(s.autoSprint ?? settings.autoSprint);
+        }
+      }
+    } catch {}
+    ui.inputMode.value = settings.inputMode;
+    ui.sens.value = String(settings.sens);
+    ui.sensVal.textContent = settings.sens.toFixed(2);
+    ui.autoSprint.checked = settings.autoSprint;
+  }
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+  }
+
+  loadSettings();
+
+  function effectiveMobile() {
+    if (settings.inputMode === "mobile") return true;
+    if (settings.inputMode === "pc") return false;
+    return isTouchDevice; // auto
+  }
+
+  // ---------- Input State ----------
   const input = {
-    mobile: isTouch,
-    joy: { active:false, id:null, cx:0, cy:0, dx:0, dy:0, mx:0, my:0 },
+    mobile: effectiveMobile(),
+    joy: { active:false, id:null, cx:0, cy:0, dx:0, dy:0 },
     look: { active:false, id:null, lastX:0, lastY:0 },
     firing: false,
   };
 
-  if (input.mobile) {
-    ui.mobileUI.classList.remove("hidden");
-    ui.controlsLine.textContent = "Mobile: Left joystick = move | Right drag = look | Tap right = shoot | RELOAD button | USE button near machines";
+  function applyInputModeUI() {
+    input.mobile = effectiveMobile();
+    if (input.mobile) {
+      ui.mobileUI.classList.remove("hidden");
+      ui.controlsLine.textContent = "Mobile: Left joystick move | Right drag look | Tap right shoots | RELOAD button | USE near stations/machines";
+    } else {
+      ui.mobileUI.classList.add("hidden");
+      ui.controlsLine.textContent = "Click to play | Move WASD | Reload R | Shop Q | Use/Buy E | Sprint Shift";
+    }
   }
+  applyInputModeUI();
 
-  // ---------- SAVE ----------
-  const SAVE_KEY = "pgm_zombie_rpg_save_v4";
-
+  // ---------- XP ----------
   function xpToNext(level) {
     return Math.floor(70 + (level - 1) * 45 + Math.pow(level - 1, 1.25) * 20);
   }
@@ -129,9 +199,12 @@
     return world.map[iy][ix] === 1;
   }
 
-  // ---------- Shop Kiosk ----------
+  // ---------- Stations ----------
   const shopKiosk = { x: 2.05, y: 1.25, r: 1.15 };
+  const armorStation = { x: 21.2, y: 22.0, r: 1.25 };
+
   function nearShopKiosk() { return dist(player.x, player.y, shopKiosk.x, shopKiosk.y) <= shopKiosk.r; }
+  function nearArmorStation() { return dist(player.x, player.y, armorStation.x, armorStation.y) <= armorStation.r; }
 
   // ---------- Perk Machines ----------
   const PERKS = [
@@ -146,8 +219,6 @@
     { id:"dead", name:"Deadshot", price:230, desc:"Less spread", color:"rgba(200,80,255,.95)",
       apply: () => { player.perkSpreadMult *= 0.80; } },
   ];
-
-  // Place perk machines in safe-ish open spots
   const perkMachines = [
     { perkId:"jug",   x: 21.3, y: 2.2,  r: 1.05 },
     { perkId:"stam",  x: 21.2, y: 21.1, r: 1.05 },
@@ -155,67 +226,48 @@
     { perkId:"tap",   x: 12.1, y: 12.1, r: 1.05 },
     { perkId:"dead",  x: 17.5, y: 9.2,  r: 1.05 },
   ];
-
   function perkById(id){ return PERKS.find(p => p.id === id); }
 
   function nearAnyMachine() {
-    if (nearShopKiosk()) return { type:"shop", ref:null };
+    if (nearShopKiosk()) return { type:"shop" };
+    if (nearArmorStation()) return { type:"armor" };
     for (const m of perkMachines) {
       if (dist(player.x, player.y, m.x, m.y) <= m.r) return { type:"perk", ref:m };
     }
     return null;
   }
 
-  // ---------- WEAPONS ----------
+  // ---------- Weapons ----------
   const WEAPONS = [
-    { id:"pistol_rusty",    name:"Rusty Pistol",    type:"pistol", rarity:"Common",   unlockLevel:1, price:0,   dmg:24, fireRate:3.2, magSize:8,  reloadTime:0.95, spread:0.010, range:10.5, reserveStart:32 },
-    { id:"pistol_service",  name:"Service Pistol",  type:"pistol", rarity:"Uncommon", unlockLevel:2, price:60,  dmg:28, fireRate:3.6, magSize:10, reloadTime:0.92, spread:0.010, range:11.0, reserveStart:40 },
-    { id:"pistol_marksman", name:"Marksman Pistol", type:"pistol", rarity:"Rare",     unlockLevel:4, price:140, dmg:36, fireRate:3.2, magSize:12, reloadTime:0.90, spread:0.008, range:12.0, reserveStart:48 },
-    { id:"pistol_relic",    name:"Relic Pistol",    type:"pistol", rarity:"Epic",     unlockLevel:7, price:320, dmg:48, fireRate:3.0, magSize:14, reloadTime:0.88, spread:0.007, range:13.0, reserveStart:56 },
+    { id:"pistol_rusty",    name:"Rusty Pistol",    rarity:"Common",   unlockLevel:1, price:0,   dmg:22, fireRate:3.2, magSize:8,  reloadTime:0.95, spread:0.012, bulletSpeed:18, range:16, reserveStart:32 },
+    { id:"pistol_service",  name:"Service Pistol",  rarity:"Uncommon", unlockLevel:2, price:75,  dmg:26, fireRate:3.6, magSize:10, reloadTime:0.92, spread:0.011, bulletSpeed:19, range:18, reserveStart:44 },
+    { id:"pistol_marksman", name:"Marksman Pistol", rarity:"Rare",     unlockLevel:4, price:160, dmg:34, fireRate:3.2, magSize:12, reloadTime:0.90, spread:0.009, bulletSpeed:20, range:20, reserveStart:52 },
+    { id:"pistol_relic",    name:"Relic Pistol",    rarity:"Epic",     unlockLevel:7, price:340, dmg:46, fireRate:3.0, magSize:14, reloadTime:0.88, spread:0.008, bulletSpeed:21, range:22, reserveStart:60 },
   ];
   function W(id){ return WEAPONS.find(w => w.id === id); }
 
-  // ---------- ARMOR ----------
+  // ---------- Armor System ----------
   const RARITIES = [
-    { name:"Common",   mult:1.0,  color:"rgba(200,200,210,.90)" },
-    { name:"Uncommon", mult:1.2,  color:"rgba(80,210,120,.92)" },
-    { name:"Rare",     mult:1.45, color:"rgba(80,160,255,.92)" },
-    { name:"Epic",     mult:1.75, color:"rgba(200,80,255,.92)" },
-    { name:"Legendary",mult:2.10, color:"rgba(255,190,80,.95)" },
+    { name:"Common",    mult:1.0,  color:"rgba(200,200,210,.90)" },
+    { name:"Uncommon",  mult:1.2,  color:"rgba(80,210,120,.92)" },
+    { name:"Rare",      mult:1.45, color:"rgba(80,160,255,.92)" },
+    { name:"Epic",      mult:1.75, color:"rgba(200,80,255,.92)" },
+    { name:"Legendary", mult:2.10, color:"rgba(255,190,80,.95)" },
   ];
   const ARMOR_SLOTS = ["helmet","chest","legs","boots"];
   const ARMOR_BASE = { helmet:4, chest:7, legs:5, boots:3 };
 
-  function rollArmorPiece() {
-    const wv = game.wave;
-    const r = Math.random();
-    let ri = 0;
-    const bump = clamp((wv - 1) / 14, 0, 1);
-
-    const tCommon = 0.58 - bump * 0.28;
-    const tUnc    = 0.28 + bump * 0.10;
-    const tRare   = 0.10 + bump * 0.10;
-    const tEpic   = 0.035 + bump * 0.06;
-    const cuts = [tCommon, tCommon+tUnc, tCommon+tUnc+tRare, tCommon+tUnc+tRare+tEpic, 1];
-
-    if (r < cuts[0]) ri = 0;
-    else if (r < cuts[1]) ri = 1;
-    else if (r < cuts[2]) ri = 2;
-    else if (r < cuts[3]) ri = 3;
-    else ri = 4;
-
-    const slot = ARMOR_SLOTS[(Math.random() * ARMOR_SLOTS.length) | 0];
+  function makeArmorPiece(slot, rarityIndex) {
     const base = ARMOR_BASE[slot];
-    const armor = Math.max(1, Math.round(base * RARITIES[ri].mult));
+    const armor = Math.max(1, Math.round(base * RARITIES[rarityIndex].mult));
     const prettySlot = slot === "helmet" ? "Helmet" : slot === "chest" ? "Chest" : slot === "legs" ? "Leggings" : "Boots";
-
     return {
-      id: `armor_${slot}_${Date.now()}_${Math.floor(Math.random()*9999)}`,
+      id: `armor_${slot}_${Date.now()}_${(Math.random()*9999)|0}`,
       slot,
-      rarityIndex: ri,
-      rarity: RARITIES[ri].name,
+      rarityIndex,
+      rarity: RARITIES[rarityIndex].name,
       armor,
-      name: `${RARITIES[ri].name} ${prettySlot}`,
+      name: `${RARITIES[rarityIndex].name} ${prettySlot}`,
     };
   }
 
@@ -228,7 +280,13 @@
     return sum;
   }
 
-  // ---------- PLAYER ----------
+  // Inventory (armor pieces you own)
+  function addArmorToInventory(piece) {
+    player.armorInv.push(piece);
+    if (player.armorInv.length > 28) player.armorInv.shift(); // keep it simple
+  }
+
+  // ---------- Player ----------
   const player = {
     x: 1.6, y: 1.6,
     a: 0,
@@ -250,7 +308,6 @@
 
     knife: { dmg: 55, range: 1.1, cd: 0.45, t: 0, swing: 0 },
 
-    // sprint + stamina
     stamina: 100,
     staminaMax: 100,
     sprintMult: 1.55,
@@ -258,22 +315,21 @@
     staminaRegen: 28,
 
     medkits: 0,
-    mineCount: 0,
-
-    lastHurtTime: 0,
-    regenDelay: 4.0,
-    regenRate: 4.0,
 
     scrap: 0,
     essence: 0,
 
     equip: { helmet:null, chest:null, legs:null, boots:null },
+    armorInv: [],
 
-    // perks (multipliers)
-    ownedPerks: {},               // perkId:true
-    perkReloadMult: 1.0,          // < 1 = faster
-    perkFireRateMult: 1.0,        // > 1 = faster
-    perkSpreadMult: 1.0,          // < 1 = tighter
+    ownedPerks: {},
+    perkReloadMult: 1.0,
+    perkFireRateMult: 1.0,
+    perkSpreadMult: 1.0,
+
+    lastHurtTime: 0,
+    regenDelay: 4.0,
+    regenRate: 4.0,
   };
 
   function currentWeapon() {
@@ -285,12 +341,10 @@
     if (!w) return;
     if (w._mag == null) w._mag = w.magSize;
     if (w._reserve == null) w._reserve = w.reserveStart ?? 32;
-
     player.ammo.mag = w._mag;
     player.ammo.reserve = w._reserve;
     player.ammo.reloading = false;
     player.ammo.rt = 0;
-
     ui.mag.textContent = w.magSize;
   }
 
@@ -323,19 +377,26 @@
     saveGame();
   }
 
-  // ---------- GAME ----------
+  // ---------- Game State ----------
   const game = {
     mode: "play",
     pointerLocked: false,
-    wave: 1,
-    t: 0,
+
+    // round system
+    round: 1,
+    alive: 0,
+    toSpawn: 0,
+    spawnBudget: 0,
+    betweenT: 0, // between-round timer
+
     recoil: 0,
     muzzle: 0,
+
     flow: null,
     flowTimer: 0,
   };
 
-  // ---------- SAVE/LOAD ----------
+  // ---------- Save / Load ----------
   function saveGame() {
     try {
       for (const w of player.slots) {
@@ -343,10 +404,13 @@
         w._mag = w._mag ?? w.magSize;
         w._reserve = w._reserve ?? (w.reserveStart ?? 32);
       }
+
       const data = {
-        cash: player.cash,
-        level: player.level,
-        xp: player.xp,
+        // progression
+        cash: player.cash, level: player.level, xp: player.xp,
+        round: game.round,
+
+        // weapons
         slotIds: player.slots.map(w => (w ? w.id : null)),
         activeSlot: player.activeSlot,
         usingKnife: player.usingKnife,
@@ -354,16 +418,15 @@
           player.slots.filter(Boolean).map(w => [w.id, { _mag: w._mag, _reserve: w._reserve }])
         ),
 
-        medkits: player.medkits,
-        mineCount: player.mineCount,
-
+        // materials
         scrap: player.scrap,
         essence: player.essence,
+
+        // armor
         equip: player.equip,
+        armorInv: player.armorInv,
 
-        hp: player.hp,
-        maxHp: player.maxHp,
-
+        // perks + stats
         ownedPerks: player.ownedPerks,
         perkReloadMult: player.perkReloadMult,
         perkFireRateMult: player.perkFireRateMult,
@@ -371,7 +434,13 @@
 
         staminaMax: player.staminaMax,
         staminaRegen: player.staminaRegen,
+
+        // health
+        hp: player.hp,
+        maxHp: player.maxHp,
+        medkits: player.medkits,
       };
+
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch {}
   }
@@ -385,6 +454,8 @@
       player.cash = data.cash ?? 0;
       player.level = data.level ?? 1;
       player.xp = data.xp ?? 0;
+
+      game.round = data.round ?? 1;
 
       const ids = Array.isArray(data.slotIds) ? data.slotIds : ["pistol_rusty", null];
       player.slots = ids.map(id => (id ? structuredClone(W(id)) : null));
@@ -401,15 +472,11 @@
       player.activeSlot = data.activeSlot ?? 0;
       player.usingKnife = !!data.usingKnife;
 
-      player.medkits = data.medkits ?? 0;
-      player.mineCount = data.mineCount ?? 0;
-
       player.scrap = data.scrap ?? 0;
       player.essence = data.essence ?? 0;
-      player.equip = data.equip ?? player.equip;
 
-      player.maxHp = data.maxHp ?? player.maxHp;
-      player.hp = clamp(data.hp ?? player.hp, 1, player.maxHp);
+      player.equip = data.equip ?? player.equip;
+      player.armorInv = Array.isArray(data.armorInv) ? data.armorInv : [];
 
       player.ownedPerks = data.ownedPerks ?? {};
       player.perkReloadMult = data.perkReloadMult ?? 1.0;
@@ -418,6 +485,10 @@
 
       player.staminaMax = data.staminaMax ?? player.staminaMax;
       player.staminaRegen = data.staminaRegen ?? player.staminaRegen;
+
+      player.maxHp = data.maxHp ?? player.maxHp;
+      player.hp = clamp(data.hp ?? player.hp, 1, player.maxHp);
+      player.medkits = data.medkits ?? 0;
 
       if (!player.usingKnife && player.slots[player.activeSlot]) {
         syncAmmoToWeapon(player.slots[player.activeSlot]);
@@ -428,6 +499,14 @@
     } catch {
       return false;
     }
+  }
+
+  function hardResetSave() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SETTINGS_KEY);
+    } catch {}
+    location.reload();
   }
 
   // ---------- Controls ----------
@@ -459,12 +538,25 @@
     player.pitch = clamp(player.pitch - my * 0.0022, -0.9, 0.9);
   });
 
+  function tryUse() {
+    if (game.mode !== "play") return;
+    const near = nearAnyMachine();
+    if (!near) return setHint("Nothing to use here.", false, 1);
+    if (near.type === "perk") return buyPerk(near.ref);
+    if (near.type === "armor") return openArmor();
+    if (near.type === "shop") return openShop();
+  }
+
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     keys.add(k);
 
     if (k === "r") reload();
-    if (k === "escape" && game.mode === "shop") closeShop();
+    if (k === "escape") {
+      if (game.mode === "shop") closeShop();
+      else if (game.mode === "armor") closeArmor();
+      else if (game.mode === "settings") closeSettings();
+    }
 
     if (k === "q") {
       if (game.mode === "shop") closeShop();
@@ -473,23 +565,20 @@
     }
 
     if (k === "e") {
-      if (game.mode !== "play") return;
-      const near = nearAnyMachine();
-      if (near?.type === "perk") buyPerk(near.ref);
-      else setHint("Walk up to a perk machine and press E.", false, 1);
+      if (game.mode === "armor") closeArmor();
+      else if (game.mode === "play") tryUse();
     }
 
     if (k === "1") equipSlot(0);
     if (k === "2") equipSlot(1);
     if (k === "3") equipKnife();
 
-    if (k === "g") placeMine();
     if (k === "h") useMedkit();
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
   // ---------- Mobile: joystick + look + tap-to-fire ----------
-  if (input.mobile) {
+  function setupMobileControls() {
     const joy = input.joy;
     const look = input.look;
 
@@ -545,7 +634,8 @@
     ui.joyBase.addEventListener("pointercancel", resetStick);
 
     canvas.addEventListener("pointerdown", (e) => {
-      // Right side: look / shoot. Ignore if touching joystick area.
+      if (!input.mobile) return;
+
       const x = e.clientX;
       const y = e.clientY;
       const joyRect = ui.joyBase.getBoundingClientRect();
@@ -557,25 +647,25 @@
       look.lastY = y;
       canvas.setPointerCapture(e.pointerId);
 
-      // tap begins firing; movement with drag will continue looking
       input.firing = true;
-
       e.preventDefault();
     }, { passive:false });
 
     canvas.addEventListener("pointermove", (e) => {
+      if (!input.mobile) return;
       if (!look.active || e.pointerId !== look.id) return;
       const dx = e.clientX - look.lastX;
       const dy = e.clientY - look.lastY;
       look.lastX = e.clientX;
       look.lastY = e.clientY;
 
-      lookDelta += dx * 1.2; // scale for touch
+      lookDelta += dx * 1.2;
       player.pitch = clamp(player.pitch - dy * 0.0028, -0.9, 0.9);
       e.preventDefault();
     }, { passive:false });
 
     canvas.addEventListener("pointerup", (e) => {
+      if (!input.mobile) return;
       if (e.pointerId !== look.id) return;
       look.active = false;
       look.id = null;
@@ -584,17 +674,42 @@
     }, { passive:false });
 
     ui.btnReload.addEventListener("click", () => reload());
-
-    ui.btnUse.addEventListener("click", () => {
-      if (game.mode !== "play") return;
-      const near = nearAnyMachine();
-      if (!near) return;
-      if (near.type === "shop") openShop();
-      if (near.type === "perk") buyPerk(near.ref);
-    });
+    ui.btnUse.addEventListener("click", () => tryUse());
   }
+  setupMobileControls();
 
-  // ---------- WEAPON AMMO INIT ----------
+  // ---------- Menu Buttons ----------
+  ui.btnSettings.addEventListener("click", () => {
+    if (game.mode === "settings") closeSettings();
+    else openSettings();
+  });
+
+  ui.inputMode.addEventListener("change", () => {
+    settings.inputMode = ui.inputMode.value;
+    saveSettings();
+    applyInputModeUI();
+  });
+
+  ui.sens.addEventListener("input", () => {
+    settings.sens = clamp(Number(ui.sens.value), 0.6, 2.5);
+    ui.sensVal.textContent = settings.sens.toFixed(2);
+    saveSettings();
+  });
+
+  ui.autoSprint.addEventListener("change", () => {
+    settings.autoSprint = ui.autoSprint.checked;
+    saveSettings();
+  });
+
+  ui.btnReset.addEventListener("click", () => {
+    if (confirm("Reset ALL progress + settings?")) hardResetSave();
+  });
+
+  ui.closeSettings.addEventListener("click", () => closeSettings());
+  ui.closeShop.addEventListener("click", () => closeShop());
+  ui.closeArmor.addEventListener("click", () => closeArmor());
+
+  // ---------- Weapon init ----------
   syncAmmoToWeapon(player.slots[0]);
   loadGame();
 
@@ -603,22 +718,20 @@
     const div = document.createElement("div");
     div.style.gridColumn = "1 / -1";
     div.style.padding = "10px 10px 2px";
-    div.style.fontWeight = "800";
+    div.style.fontWeight = "900";
     div.style.opacity = "0.92";
     div.textContent = text;
     return div;
   }
-
   function shopInfo(text) {
     const div = document.createElement("div");
     div.style.gridColumn = "1 / -1";
     div.style.padding = "0 10px 10px";
-    div.style.opacity = "0.75";
+    div.style.opacity = "0.78";
     div.style.fontSize = "13px";
     div.textContent = text;
     return div;
   }
-
   function shopButton({title, desc, price, onClick, locked=false, lockText=""}) {
     const btn = document.createElement("button");
     btn.className = "shop-btn" + (locked ? " locked" : "");
@@ -635,18 +748,19 @@
     game.mode = "shop";
     ui.shop.classList.remove("hidden");
     ui.death.classList.add("hidden");
+    ui.settingsMenu.classList.add("hidden");
+    ui.armorMenu.classList.add("hidden");
     renderShop();
     setHint("SHOP OPEN (paused). Q / ESC to close.", true, 4, 2.0);
     saveGame();
   }
-
   function closeShop() {
+    if (game.mode !== "shop") return;
     game.mode = "play";
     ui.shop.classList.add("hidden");
     setHint("Back to surviving.", true, 2);
     saveGame();
   }
-  ui.closeShop.addEventListener("click", closeShop);
 
   function ownsWeapon(id) {
     return player.slots.some(s => s && s.id === id) || id === "pistol_rusty";
@@ -663,65 +777,29 @@
     saveGame();
   }
 
-  let shopArmorRoll = null;
-
-  function equipArmor(piece) {
-    if (!piece || !piece.slot) return;
-    player.equip[piece.slot] = piece;
-    setHint(`Equipped: ${piece.name} (+${piece.armor} armor)`, true, 3);
-    saveGame();
-  }
-
-  function upgradeEquippedArmor(slot) {
-    const it = player.equip[slot];
-    if (!it) return setHint(`No ${slot} equipped.`, false, 2);
-    if (it.rarityIndex >= 4) return setHint("Already Legendary.", true, 2);
-
-    const next = it.rarityIndex + 1;
-    const costScrap = 12 + next * 10;
-    const costEss  = 3 + next * 2;
-
-    if (player.scrap < costScrap || player.essence < costEss) {
-      return setHint(`Need ${costScrap} scrap + ${costEss} essence.`, false, 2);
-    }
-
-    player.scrap -= costScrap;
-    player.essence -= costEss;
-    it.rarityIndex = next;
-    it.rarity = RARITIES[next].name;
-
-    const base = ARMOR_BASE[it.slot];
-    it.armor = Math.max(1, Math.round(base * RARITIES[next].mult));
-    it.name = `${it.rarity} ${it.slot === "helmet" ? "Helmet" : it.slot === "chest" ? "Chest" : it.slot === "legs" ? "Leggings" : "Boots"}`;
-
-    setHint(`Upgraded armor: ${it.name} (+${it.armor})`, true, 3);
-    saveGame();
-  }
-
   function renderShop() {
     ui.shopList.innerHTML = "";
 
-    const armorTotal = getTotalArmor();
     ui.shopList.appendChild(shopInfo(
-      `You have: Medkits ${player.medkits} | Mines ${player.mineCount} | Scrap ${player.scrap} | Essence ${player.essence} | Armor ${armorTotal}`
+      `Medkits ${player.medkits} | Scrap ${player.scrap} | Essence ${player.essence} | Armor ${getTotalArmor()}`
     ));
 
     ui.shopList.appendChild(shopHeader("Utility"));
 
     ui.shopList.appendChild(shopButton({
       title: "Ammo Pack",
-      desc: "+16 reserve ammo (current weapon)",
-      price: 15,
-      locked: player.cash < 15,
+      desc: "+20 reserve ammo (current weapon)",
+      price: 18,
+      locked: player.cash < 18,
       lockText: "Not enough cash",
       onClick: () => {
-        player.cash -= 15;
+        player.cash -= 18;
         if (!player.usingKnife) {
-          player.ammo.reserve += 16;
+          player.ammo.reserve += 20;
           const w = currentWeapon();
           if (w) saveAmmoFromWeapon(w);
         }
-        setHint("Bought ammo (+16).", true, 3);
+        setHint("Bought ammo (+20).", true, 3);
         saveGame();
         renderShop();
       }
@@ -730,28 +808,13 @@
     ui.shopList.appendChild(shopButton({
       title: "Medkit",
       desc: "+1 Medkit (press H to use)",
-      price: 20,
-      locked: player.cash < 20,
+      price: 22,
+      locked: player.cash < 22,
       lockText: "Not enough cash",
       onClick: () => {
-        player.cash -= 20;
+        player.cash -= 22;
         player.medkits += 1;
         setHint("Bought 1 medkit. Press H to heal.", true, 3);
-        saveGame();
-        renderShop();
-      }
-    }));
-
-    ui.shopList.appendChild(shopButton({
-      title: "Land Mine",
-      desc: "+1 Mine (press G to place)",
-      price: 35,
-      locked: player.cash < 35,
-      lockText: "Not enough cash",
-      onClick: () => {
-        player.cash -= 35;
-        player.mineCount += 1;
-        setHint("Bought 1 mine. Press G to place.", true, 3);
         saveGame();
         renderShop();
       }
@@ -777,84 +840,234 @@
       }));
     }
 
-    ui.shopList.appendChild(shopHeader("Armor"));
-    if (!shopArmorRoll) shopArmorRoll = rollArmorPiece();
-    const ar = shopArmorRoll;
+    ui.shopList.appendChild(shopHeader("Tip"));
+    ui.shopList.appendChild(shopInfo("Armor crafting is at the ARMOR station (blue). Perks are separate machines."));
+  }
 
-    const armorPrice = Math.max(25, Math.floor((18 + ar.armor * 6) * (1 + game.wave * 0.04)));
-    ui.shopList.appendChild(shopButton({
-      title: ar.name,
-      desc: `Slot: ${ar.slot} | Armor +${ar.armor} | Equip to replace current`,
-      price: armorPrice,
-      locked: player.cash < armorPrice,
-      lockText: "Not enough cash",
-      onClick: () => {
-        player.cash -= armorPrice;
-        equipArmor(ar);
-        shopArmorRoll = rollArmorPiece();
-        saveGame();
-        renderShop();
-      }
+  // ---------- ARMOR MENU ----------
+  function openArmor() {
+    game.mode = "armor";
+    ui.armorMenu.classList.remove("hidden");
+    ui.shop.classList.add("hidden");
+    ui.settingsMenu.classList.add("hidden");
+    ui.death.classList.add("hidden");
+    renderArmorMenu();
+    setHint("ARMOR STATION OPEN (paused). E / ESC to close.", true, 4, 2.0);
+    saveGame();
+  }
+  function closeArmor() {
+    if (game.mode !== "armor") return;
+    game.mode = "play";
+    ui.armorMenu.classList.add("hidden");
+    setHint("Armor station closed.", true, 2);
+    saveGame();
+  }
+
+  function craftArmorRoll(kind) {
+    // grindy costs, scale a bit with round
+    const r = game.round;
+    let costScrap = 0, costEss = 0;
+    let chances = null;
+
+    if (kind === "basic") {
+      costScrap = 18 + Math.floor(r * 1.2);
+      costEss = 2 + Math.floor(r * 0.25);
+      chances = [0.60, 0.25, 0.11, 0.035, 0.005]; // C/U/R/E/L
+    } else if (kind === "advanced") {
+      costScrap = 35 + Math.floor(r * 1.8);
+      costEss = 6 + Math.floor(r * 0.50);
+      chances = [0.35, 0.30, 0.22, 0.10, 0.03];
+    } else {
+      costScrap = 60 + Math.floor(r * 2.2);
+      costEss = 12 + Math.floor(r * 0.80);
+      chances = [0.18, 0.28, 0.28, 0.18, 0.08];
+    }
+
+    if (player.scrap < costScrap || player.essence < costEss) {
+      setHint(`Need ${costScrap} scrap + ${costEss} essence.`, false, 3, 1.2);
+      return;
+    }
+
+    player.scrap -= costScrap;
+    player.essence -= costEss;
+
+    // pick rarity
+    const roll = Math.random();
+    let acc = 0, ri = 0;
+    for (let i = 0; i < chances.length; i++) {
+      acc += chances[i];
+      if (roll <= acc) { ri = i; break; }
+    }
+
+    // pick slot
+    const slot = ARMOR_SLOTS[(Math.random() * ARMOR_SLOTS.length) | 0];
+    const piece = makeArmorPiece(slot, ri);
+    addArmorToInventory(piece);
+
+    setHint(`Crafted: ${piece.name} (+${piece.armor})`, true, 4, 1.5);
+    saveGame();
+    renderArmorMenu();
+  }
+
+  function equipArmorFromInv(index) {
+    const piece = player.armorInv[index];
+    if (!piece) return;
+    const cur = player.equip[piece.slot];
+
+    player.equip[piece.slot] = piece;
+    // remove from inv (optional grind feel: keep it simple, remove it)
+    player.armorInv.splice(index, 1);
+
+    if (!cur) setHint(`Equipped ${piece.name}`, true, 3, 1.2);
+    else setHint(`Equipped ${piece.name} (replaced ${cur.name})`, true, 3, 1.4);
+
+    saveGame();
+    renderArmorMenu();
+  }
+
+  function upgradeEquippedArmor(slot) {
+    const it = player.equip[slot];
+    if (!it) return setHint(`No ${slot} equipped.`, false, 3, 1.1);
+    if (it.rarityIndex >= 4) return setHint("Already Legendary.", true, 2, 1.0);
+
+    const next = it.rarityIndex + 1;
+    // grindy upgrade curve
+    const costScrap = 28 + next * 22 + Math.floor(game.round * 1.1);
+    const costEss = 6 + next * 5 + Math.floor(game.round * 0.35);
+
+    if (player.scrap < costScrap || player.essence < costEss) {
+      return setHint(`Need ${costScrap} scrap + ${costEss} essence.`, false, 3, 1.2);
+    }
+
+    player.scrap -= costScrap;
+    player.essence -= costEss;
+
+    it.rarityIndex = next;
+    it.rarity = RARITIES[next].name;
+
+    const base = ARMOR_BASE[it.slot];
+    it.armor = Math.max(1, Math.round(base * RARITIES[next].mult));
+    it.name = `${it.rarity} ${it.slot === "helmet" ? "Helmet" : it.slot === "chest" ? "Chest" : it.slot === "legs" ? "Leggings" : "Boots"}`;
+
+    setHint(`Upgraded: ${it.name} (+${it.armor})`, true, 4, 1.5);
+    saveGame();
+    renderArmorMenu();
+  }
+
+  function renderArmorMenu() {
+    ui.armorList.innerHTML = "";
+
+    ui.armorList.appendChild(shopInfo(
+      `Scrap ${player.scrap} | Essence ${player.essence} | Total Armor ${getTotalArmor()}`
+    ));
+
+    ui.armorList.appendChild(shopHeader("Craft"));
+    ui.armorList.appendChild(shopButton({
+      title: "Craft: Basic Roll",
+      desc: "Cheaper, mostly Common/Uncommon",
+      price: 0,
+      locked: false,
+      onClick: () => craftArmorRoll("basic"),
+    }));
+    ui.armorList.appendChild(shopButton({
+      title: "Craft: Advanced Roll",
+      desc: "Better odds, costs more",
+      price: 0,
+      locked: false,
+      onClick: () => craftArmorRoll("advanced"),
+    }));
+    ui.armorList.appendChild(shopButton({
+      title: "Craft: Elite Roll",
+      desc: "Best odds, expensive",
+      price: 0,
+      locked: false,
+      onClick: () => craftArmorRoll("elite"),
     }));
 
-    ui.shopList.appendChild(shopHeader("Crafting"));
-    ui.shopList.appendChild(shopInfo("Upgrade equipped armor using Scrap + Essence (earned from kills/drops)."));
-
+    ui.armorList.appendChild(shopHeader("Equipped"));
     for (const slot of ARMOR_SLOTS) {
       const it = player.equip[slot];
       const name = it ? `${it.name} (+${it.armor})` : `Empty (${slot})`;
-      const next = it ? it.rarityIndex + 1 : 0;
 
-      let costScrap = 0, costEss = 0, lockText = "";
+      let lockText = "";
       let locked = false;
-
-      if (!it) { locked = true; lockText = "Equip armor first"; }
+      if (!it) { locked = true; lockText = "Equip a piece first"; }
       else if (it.rarityIndex >= 4) { locked = true; lockText = "Max"; }
       else {
-        costScrap = 12 + next * 10;
-        costEss = 3 + next * 2;
-        if (player.scrap < costScrap || player.essence < costEss) {
-          locked = true;
-          lockText = `Need ${costScrap} scrap + ${costEss} essence`;
-        } else lockText = `${costScrap} scrap + ${costEss} essence`;
+        const next = it.rarityIndex + 1;
+        const costScrap = 28 + next * 22 + Math.floor(game.round * 1.1);
+        const costEss = 6 + next * 5 + Math.floor(game.round * 0.35);
+        lockText = `Upgrade costs ${costScrap} scrap + ${costEss} essence`;
+        if (player.scrap < costScrap || player.essence < costEss) locked = true;
       }
 
-      ui.shopList.appendChild(shopButton({
+      ui.armorList.appendChild(shopButton({
         title: `Upgrade ${slot}`,
         desc: name,
         price: 0,
         locked,
         lockText,
-        onClick: () => {
-          upgradeEquippedArmor(slot);
-          renderShop();
-        }
+        onClick: () => { upgradeEquippedArmor(slot); },
       }));
+    }
+
+    ui.armorList.appendChild(shopHeader("Inventory"));
+    if (player.armorInv.length === 0) {
+      ui.armorList.appendChild(shopInfo("No armor crafted yet. Roll some armor above."));
+    } else {
+      // show newest first
+      const inv = [...player.armorInv].reverse();
+      for (let i = 0; i < inv.length; i++) {
+        const piece = inv[i];
+        const realIndex = player.armorInv.length - 1 - i;
+        const col = RARITIES[piece.rarityIndex].color;
+        ui.armorList.appendChild(shopButton({
+          title: piece.name,
+          desc: `Slot: ${piece.slot} | Armor +${piece.armor} | Click to equip`,
+          price: 0,
+          locked: false,
+          onClick: () => equipArmorFromInv(realIndex),
+        }));
+        // tiny color hint (optional)
+        ui.armorList.lastChild.style.borderColor = col.replace(")", ",.35)").replace("rgba","rgba");
+      }
     }
   }
 
-  // ---------- Perks Buy ----------
+  // ---------- SETTINGS MENU ----------
+  function openSettings() {
+    game.mode = "settings";
+    ui.settingsMenu.classList.remove("hidden");
+    ui.shop.classList.add("hidden");
+    ui.armorMenu.classList.add("hidden");
+    ui.death.classList.add("hidden");
+    setHint("SETTINGS OPEN (paused).", true, 3, 1.2);
+  }
+  function closeSettings() {
+    if (game.mode !== "settings") return;
+    game.mode = "play";
+    ui.settingsMenu.classList.add("hidden");
+    setHint("Settings closed.", true, 2, 1.0);
+  }
+
+  // ---------- Perks ----------
   function buyPerk(machine) {
     const perk = perkById(machine.perkId);
     if (!perk) return;
-
     if (player.ownedPerks[perk.id]) return setHint(`${perk.name} already owned.`, true, 2);
-    if (player.cash < perk.price) return setHint(`Need $${perk.price} for ${perk.name}.`, false, 2);
-
+    if (player.cash < perk.price) return setHint(`Need $${perk.price} for ${perk.name}.`, false, 3);
     player.cash -= perk.price;
     player.ownedPerks[perk.id] = true;
     perk.apply();
-
-    setHint(`PERK BOUGHT: ${perk.name} ✅`, true, 4, 1.8);
+    setHint(`PERK BOUGHT: ${perk.name} ✅`, true, 4, 1.6);
     saveGame();
   }
 
-  // ---------- Enemies + Drops ----------
+  // ---------- Enemies + Drops + Bullets ----------
   let zombies = [];
   let drops = [];
-  let mines = [];
+  let bullets = [];
 
-  // Chaser system
   const MAX_CHASERS = 4;
 
   function countChasers(){
@@ -864,15 +1077,11 @@
   }
 
   function assignChasers() {
-    // Keep at most MAX_CHASERS. Prefer nearest zombies.
     const chasers = zombies.filter(z => z.role === "chaser");
     if (chasers.length > MAX_CHASERS) {
-      // demote farthest
       chasers.sort((a,b) => dist(player.x,player.y,b.x,b.y) - dist(player.x,player.y,a.x,a.y));
       for (let i = MAX_CHASERS; i < chasers.length; i++) chasers[i].role = "wander";
     }
-
-    // Promote if needed
     let need = MAX_CHASERS - zombies.filter(z => z.role === "chaser").length;
     if (need <= 0) return;
 
@@ -888,48 +1097,46 @@
   }
 
   function spawnZombie() {
-    for (let tries = 0; tries < 90; tries++) {
+    for (let tries = 0; tries < 100; tries++) {
       const x = rand(1.5, world.mapW - 1.5);
       const y = rand(1.5, world.mapH - 1.5);
       if (isWall(x, y)) continue;
       if (dist(x, y, shopKiosk.x, shopKiosk.y) < 3.0) continue;
+      if (dist(x, y, armorStation.x, armorStation.y) < 3.0) continue;
       if (dist(x, y, player.x, player.y) < 4.0) continue;
 
-      const hp = 70 + game.wave * 12;
+      const hp = 65 + game.round * 14;
+      const dmg = 8 + game.round * 1.7;
 
       zombies.push({
         id: `z_${Date.now()}_${(Math.random()*9999)|0}`,
         x, y,
         r: 0.28,
         hp, maxHp: hp,
-        speed: (0.75 + game.wave * 0.04) * (Math.random() < 0.18 ? 1.35 : 1),
-        dmg: 9 + game.wave * 1.6,
+        speed: (0.72 + game.round * 0.035) * (Math.random() < 0.18 ? 1.35 : 1),
+        dmg,
         hitCd: 0,
         type: Math.random() < 0.18 ? "runner" : "walker",
 
-        role: "wander",            // "chaser" or "wander"
-        thinkT: rand(0.4, 1.2),    // wander re-think timer
+        role: "wander",
+        thinkT: rand(0.4, 1.2),
         wanderA: rand(-Math.PI, Math.PI),
         animSeed: rand(0, 1000),
       });
 
-      return;
+      game.alive++;
+      return true;
     }
+    return false;
   }
 
   function dropCash(x, y, amount) {
     drops.push({ kind:"cash", x, y, amount, t: 14, r: 0.22 });
   }
-
   function dropMats(x, y) {
-    const s = Math.random();
-    if (s < 0.70) drops.push({ kind:"scrap", x, y, amount: 1 + (Math.random()<0.35 ? 1 : 0), t: 14, r: 0.22 });
-    if (s < 0.25) drops.push({ kind:"ess", x, y, amount: 1, t: 14, r: 0.22 });
-    const arChance = clamp(0.06 + game.wave * 0.004, 0.06, 0.18);
-    if (Math.random() < arChance) {
-      const piece = rollArmorPiece();
-      drops.push({ kind:"armor", x, y, piece, t: 18, r: 0.26 });
-    }
+    // grind-friendly: mostly scrap, occasional essence
+    if (Math.random() < 0.85) drops.push({ kind:"scrap", x, y, amount: 1 + (Math.random()<0.40 ? 1 : 0), t: 14, r: 0.22 });
+    if (Math.random() < 0.22) drops.push({ kind:"ess", x, y, amount: 1, t: 14, r: 0.22 });
   }
 
   function gainXP(amount) {
@@ -937,17 +1144,19 @@
     while (player.xp >= xpToNext(player.level)) {
       player.xp -= xpToNext(player.level);
       player.level++;
-      setHint(`LEVEL UP! Now Lv ${player.level}`, true, 4, 1.8);
+      setHint(`LEVEL UP! Now Lv ${player.level}`, true, 4, 1.6);
     }
     saveGame();
   }
 
   function handleZombieDeath(z) {
-    const cash = Math.floor(rand(7, 14) + game.wave * 0.8);
-    const xp = 14 + game.wave * 2;
+    const cash = Math.floor(rand(7, 14) + game.round * 0.9);
+    const xp = 14 + game.round * 2;
     dropCash(z.x, z.y, cash);
     dropMats(z.x, z.y);
     gainXP(xp);
+
+    game.alive = Math.max(0, game.alive - 1);
   }
 
   // ---------- Items ----------
@@ -962,24 +1171,10 @@
     saveGame();
   }
 
-  function placeMine() {
-    if (game.mode !== "play") return;
-    if (player.mineCount <= 0) return setHint("No mines. Buy some.", false, 2);
-
-    const mx = player.x + Math.cos(player.a) * 0.55;
-    const my = player.y + Math.sin(player.a) * 0.55;
-    if (isWall(mx, my)) return setHint("Can't place a mine on a wall.", false, 2);
-
-    player.mineCount--;
-    mines.push({ x: mx, y: my, r: 0.25, t: 40 });
-    setHint("Mine placed 💣", true, 3);
-    saveGame();
-  }
-
   // ---------- Combat ----------
   function reload() {
     if (game.mode !== "play") return;
-    if (player.usingKnife) return setHint("Knife doesn't reload 😈", true, 2);
+    if (player.usingKnife) return setHint("Knife doesn't reload.", true, 2);
 
     const w = currentWeapon();
     if (!w) return;
@@ -1031,6 +1226,19 @@
     }
   }
 
+  function spawnBullet(ang, wpn) {
+    // tiny dark projectile, visible in world
+    bullets.push({
+      x: player.x + Math.cos(ang) * 0.45,
+      y: player.y + Math.sin(ang) * 0.45,
+      vx: Math.cos(ang) * wpn.bulletSpeed,
+      vy: Math.sin(ang) * wpn.bulletSpeed,
+      life: wpn.range / wpn.bulletSpeed, // seconds
+      r: 0.06, // hit radius in world
+      dmg: wpn.dmg,
+    });
+  }
+
   function shoot() {
     if (game.mode !== "play") return;
     if (!input.mobile && !game.pointerLocked) return;
@@ -1053,55 +1261,13 @@
     game.muzzle = 0.06;
     game.recoil = 0.10;
 
-    const pellets = w.pellets ?? 1;
-    let didHit = false;
+    // spread affects bullet angle
+    const spread = (Math.random() - 0.5) * w.spread * player.perkSpreadMult;
+    const ang = player.a + spread;
 
-    for (let p = 0; p < pellets; p++) {
-      const spread = (Math.random() - 0.5) * w.spread * player.perkSpreadMult;
-      const ang = player.a + spread;
+    spawnBullet(ang, w);
 
-      const step = 0.04;
-      let hitZ = null;
-
-      for (let d = 0; d <= w.range; d += step) {
-        const rx = player.x + Math.cos(ang) * d;
-        const ry = player.y + Math.sin(ang) * d;
-        if (isWall(rx, ry)) break;
-
-        for (const z of zombies) {
-          if (dist(rx, ry, z.x, z.y) < z.r + 0.12) { hitZ = z; break; }
-        }
-        if (hitZ) break;
-      }
-
-      if (hitZ) {
-        didHit = true;
-
-        const hgt = innerHeight;
-        const horizon = (hgt / 2) + (player.pitch * (hgt * 0.35));
-        const spriteSize = clamp((hgt * 0.90) / (dist(player.x, player.y, hitZ.x, hitZ.y) + 0.001), 12, hgt * 1.25);
-        const spriteBottom = horizon + spriteSize * 0.35;
-        const spriteTop = spriteBottom - spriteSize;
-
-        const crossY = hgt / 2;
-        const yRel = (crossY - spriteTop) / spriteSize;
-
-        let mult = 1.0;
-        if (yRel < 0.28) mult = 1.8;       // head
-        else if (yRel > 0.78) mult = 0.65; // legs
-
-        const dmg = w.dmg * mult;
-        hitZ.hp -= dmg;
-
-        if (hitZ.hp <= 0) {
-          handleZombieDeath(hitZ);
-          zombies = zombies.filter(z => z !== hitZ);
-        }
-      }
-    }
-
-    const cw = currentWeapon();
-    if (cw) saveAmmoFromWeapon(cw);
+    saveAmmoFromWeapon(w);
     saveGame();
   }
 
@@ -1138,12 +1304,12 @@
   // ---------- Raycast ----------
   function castRay(angle) {
     const step = 0.02;
-    for (let d = 0; d < 20; d += step) {
+    for (let d = 0; d < 22; d += step) {
       const x = player.x + Math.cos(angle) * d;
       const y = player.y + Math.sin(angle) * d;
       if (isWall(x, y)) return d;
     }
-    return 20;
+    return 22;
   }
 
   // ---------- Minimap ----------
@@ -1172,6 +1338,10 @@
     // shop
     ctx.fillStyle = "rgba(34,197,94,.95)";
     ctx.fillRect(x0 + shopKiosk.x * cell - 3, y0 + shopKiosk.y * cell - 3, 6, 6);
+
+    // armor station
+    ctx.fillStyle = "rgba(80,160,255,.95)";
+    ctx.fillRect(x0 + armorStation.x * cell - 3, y0 + armorStation.y * cell - 3, 6, 6);
 
     // perks
     for (const m of perkMachines) {
@@ -1204,7 +1374,7 @@
     ctx.stroke();
   }
 
-  // ---------- Gun model ----------
+  // ---------- Gun Model ----------
   function gunStyleFor(id) {
     if (id === "pistol_rusty")    return { body:"rgba(60,70,85,.96)",  dark:"rgba(22,26,34,.98)", accent:"rgba(170,120,60,.85)",  bodyLen:118, barrelLen:22 };
     if (id === "pistol_service")  return { body:"rgba(55,65,80,.96)",  dark:"rgba(18,20,26,.98)", accent:"rgba(80,160,255,.85)",  bodyLen:132, barrelLen:26 };
@@ -1219,7 +1389,8 @@
     game.recoil = Math.max(0, game.recoil - dt * 2.2);
     game.muzzle = Math.max(0, game.muzzle - dt * 3.2);
 
-    const moving = (keys.has("w") || keys.has("a") || keys.has("s") || keys.has("d")) || (input.mobile && (Math.hypot(input.joy.dx, input.joy.dy) > 0.12));
+    const moving = (keys.has("w") || keys.has("a") || keys.has("s") || keys.has("d")) ||
+      (input.mobile && (Math.hypot(input.joy.dx, input.joy.dy) > 0.12));
     const bob = moving ? Math.sin(performance.now() / 90) * 4 : 0;
 
     const rx = game.recoil * 22;
@@ -1234,7 +1405,6 @@
 
     ctx.save();
     ctx.globalAlpha = 0.98;
-
     ctx.translate(baseX, baseY);
     ctx.rotate(-0.06);
 
@@ -1285,7 +1455,7 @@
     ctx.restore();
   }
 
-  // ---------- Billboard Machines ----------
+  // ---------- Billboard helper ----------
   function drawBillboard(screenX, top, size, title, color, sub="") {
     const left = screenX - size / 2;
 
@@ -1296,7 +1466,7 @@
     ctx.fillRect(left + size*0.14, top + size*0.18, size*0.72, size*0.18);
 
     ctx.fillStyle = "rgba(0,0,0,.55)";
-    ctx.font = `800 ${Math.max(10, size*0.11)}px system-ui`;
+    ctx.font = `900 ${Math.max(10, size*0.11)}px system-ui`;
     ctx.fillText(title, left + size*0.18, top + size*0.31);
 
     ctx.fillStyle = "rgba(255,255,255,.18)";
@@ -1305,12 +1475,11 @@
     ctx.fillRect(left + size*0.16, top + size*0.58, size*0.60, size*0.04);
 
     if (sub) {
-      ctx.fillStyle = "rgba(255,255,255,.65)";
-      ctx.font = `700 ${Math.max(10, size*0.085)}px system-ui`;
+      ctx.fillStyle = "rgba(255,255,255,.70)";
+      ctx.font = `800 ${Math.max(10, size*0.085)}px system-ui`;
       ctx.fillText(sub, left + size*0.18, top + size*0.70);
     }
 
-    // glow
     ctx.fillStyle = color.replace(")", ",.14)").replace("rgba", "rgba");
     ctx.fillRect(left + size*0.12, top + size*0.18, size*0.76, size*0.66);
   }
@@ -1354,8 +1523,11 @@
       }
     }
 
-    // build sprite list
+    // sprite list
     const sprites = [];
+
+    // bullets (visible tiny dark balls)
+    for (const b of bullets) sprites.push({ kind:"bullet", ref:b, x:b.x, y:b.y, d: dist(player.x, player.y, b.x, b.y) });
 
     // zombies
     for (const z of zombies) sprites.push({ kind:"z", ref:z, x:z.x, y:z.y, d: dist(player.x, player.y, z.x, z.y) });
@@ -1363,20 +1535,14 @@
     // drops
     for (const d of drops) sprites.push({ kind:"drop", ref:d, x:d.x, y:d.y, d: dist(player.x, player.y, d.x, d.y) });
 
-    // mines
-    for (const m of mines) sprites.push({ kind:"mine", ref:m, x:m.x, y:m.y, d: dist(player.x, player.y, m.x, m.y) });
-
-    // shop kiosk
+    // shop + armor + perks
     sprites.push({ kind:"shop", x:shopKiosk.x, y:shopKiosk.y, d: dist(player.x, player.y, shopKiosk.x, shopKiosk.y) });
-
-    // perk machines
-    for (const pm of perkMachines) {
-      sprites.push({ kind:"perk", ref:pm, x:pm.x, y:pm.y, d: dist(player.x, player.y, pm.x, pm.y) });
-    }
+    sprites.push({ kind:"armor", x:armorStation.x, y:armorStation.y, d: dist(player.x, player.y, armorStation.x, armorStation.y) });
+    for (const pm of perkMachines) sprites.push({ kind:"perk", ref:pm, x:pm.x, y:pm.y, d: dist(player.x, player.y, pm.x, pm.y) });
 
     sprites.sort((a,b) => b.d - a.d);
 
-    // draw sprites
+    // draw sprites (simple billboards)
     for (const s of sprites) {
       const dx = s.x - player.x;
       const dy = s.y - player.y;
@@ -1392,7 +1558,7 @@
       if (rayD + 0.05 < distTo) continue;
 
       const screenX = (ang / (player.fov / 2)) * (w / 2) + (w / 2);
-      const size = clamp((h * 0.90) / (distTo + 0.001), 12, h * 1.25);
+      const size = clamp((h * 0.90) / (distTo + 0.001), 10, h * 1.25);
 
       const spriteBottom = horizon + size * 0.35;
       const top = spriteBottom - size;
@@ -1402,7 +1568,10 @@
         drawBillboard(screenX, top, size * 0.92, "SHOP", "rgba(34,197,94,.95)", "Press Q");
         continue;
       }
-
+      if (s.kind === "armor") {
+        drawBillboard(screenX, top, size * 0.92, "ARMOR", "rgba(80,160,255,.95)", "Press E");
+        continue;
+      }
       if (s.kind === "perk") {
         const perk = perkById(s.ref.perkId);
         const owned = perk && player.ownedPerks[perk.id];
@@ -1411,22 +1580,12 @@
         drawBillboard(screenX, top, size * 0.92, title, perk ? perk.color : "rgba(255,255,255,.9)", sub);
         continue;
       }
-
-      if (s.kind === "mine") {
-        ctx.fillStyle = "rgba(255,210,80,.92)";
-        ctx.beginPath();
-        ctx.arc(screenX, horizon + size * 0.10, Math.max(5, size * 0.07), 0, Math.PI * 2);
-        ctx.fill();
-        continue;
-      }
-
       if (s.kind === "drop") {
         const d = s.ref;
         let col = "rgba(34,197,94,.9)";
         let label = "$";
         if (d.kind === "scrap") { col = "rgba(160,175,190,.92)"; label = "S"; }
         if (d.kind === "ess")   { col = "rgba(200,80,255,.92)";  label = "E"; }
-        if (d.kind === "armor") { col = RARITIES[d.piece.rarityIndex].color; label = "A"; }
 
         ctx.fillStyle = col;
         ctx.beginPath();
@@ -1434,15 +1593,23 @@
         ctx.fill();
 
         ctx.fillStyle = "rgba(0,0,0,.55)";
-        ctx.font = "bold 14px system-ui";
+        ctx.font = "900 14px system-ui";
         ctx.fillText(label, screenX - 5, horizon + size * 0.10 + 5);
         continue;
       }
-
+      if (s.kind === "bullet") {
+        // tiny black ball (a dot) slightly above horizon to look "in-world"
+        const bsz = Math.max(2, size * 0.08);
+        ctx.fillStyle = "rgba(0,0,0,.70)";
+        ctx.beginPath();
+        ctx.arc(screenX, horizon + size * 0.05, bsz * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
       if (s.kind === "z") {
         const z = s.ref;
 
-        // --- Better zombie animation (no images) ---
+        // Better animated zombie (no images)
         const runner = z.type === "runner";
         const chaser = z.role === "chaser";
 
@@ -1458,31 +1625,27 @@
         const bob = Math.abs(walk) * (size * 0.018);
         const lean = sway * (size * 0.03);
 
-        // subtle shading/fog by distance
         const shade = clamp(1 - distTo / 11, 0.2, 1);
         const bc = `rgba(${Math.floor(baseBody[0]*shade)},${Math.floor(baseBody[1]*shade)},${Math.floor(baseBody[2]*shade)},.92)`;
         const dc = `rgba(${Math.floor(baseDark[0]*shade)},${Math.floor(baseDark[1]*shade)},${Math.floor(baseDark[2]*shade)},.92)`;
 
-        // body proportions
         const headR = size * 0.12;
         const torsoW = size * 0.42;
         const torsoH = size * 0.46;
         const torsoX = left + size*0.29 + lean*0.08;
         const torsoY = top + size*0.34 + bob;
 
-        // legs swing
         const legSwing = walk * (size * 0.06);
         const legW = size * 0.10;
         const legH = size * 0.26;
         const legY = top + size*0.70 + bob;
 
-        // arms
         const armSwing = -walk * (size * 0.06);
         const armW = size * 0.12;
         const armH = size * 0.34;
         const armY = top + size*0.41 + bob;
 
-        // shadow on floor
+        // shadow
         ctx.fillStyle = "rgba(0,0,0,.22)";
         ctx.beginPath();
         ctx.ellipse(screenX, horizon + size*0.34, size*0.18, size*0.07, 0, 0, Math.PI*2);
@@ -1497,7 +1660,7 @@
         ctx.fillStyle = bc;
         ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
 
-        // arms (swing opposite legs)
+        // arms
         ctx.fillStyle = dc;
         ctx.fillRect(left + size*0.18 + armSwing, armY, armW, armH);
         ctx.fillRect(left + size*0.70 - armSwing, armY, armW, armH);
@@ -1510,18 +1673,16 @@
         ctx.arc(headX, headY, headR, 0, Math.PI*2);
         ctx.fill();
 
-        // face shadows
+        // face shadow + eyes
         ctx.fillStyle = "rgba(0,0,0,.20)";
         ctx.beginPath();
         ctx.arc(headX + headR*0.18, headY + headR*0.15, headR*0.85, 0, Math.PI*2);
         ctx.fill();
 
-        // eyes
         ctx.fillStyle = "rgba(0,0,0,.45)";
         ctx.fillRect(headX - headR*0.55, headY - headR*0.10, headR*0.35, headR*0.22);
         ctx.fillRect(headX + headR*0.20, headY - headR*0.10, headR*0.35, headR*0.22);
 
-        // chaser marker (subtle red glow)
         if (chaser) {
           ctx.fillStyle = "rgba(255,80,80,.16)";
           ctx.beginPath();
@@ -1535,8 +1696,6 @@
         ctx.fillRect(left, top - 10, size, 6);
         ctx.fillStyle = "rgba(34,197,94,.9)";
         ctx.fillRect(left, top - 10, size * pct, 6);
-
-        continue;
       }
     }
 
@@ -1554,10 +1713,11 @@
     drawMinimap();
     drawGunModel(dt);
 
-    // prompts (no spam overwriting other hints)
+    // gentle prompts
     const near = nearAnyMachine();
     if (near && game.mode === "play") {
       if (near.type === "shop") setHint("At SHOP: Q (or USE on mobile).", true, 0, 0.25);
+      if (near.type === "armor") setHint("At ARMOR: E (or USE on mobile).", true, 0, 0.25);
       if (near.type === "perk") setHint("Perk machine: E (or USE on mobile).", true, 0, 0.25);
     }
   }
@@ -1566,6 +1726,8 @@
   function die() {
     game.mode = "dead";
     ui.shop.classList.add("hidden");
+    ui.armorMenu.classList.add("hidden");
+    ui.settingsMenu.classList.add("hidden");
     ui.death.classList.remove("hidden");
     setHint("You died. Click Restart.", false, 5, 2.0);
     document.exitPointerLock?.();
@@ -1575,21 +1737,38 @@
   ui.restart.addEventListener("click", () => {
     zombies = [];
     drops = [];
-    mines = [];
-    game.wave = 1;
-    game.t = 0;
-    game.mode = "play";
+    bullets = [];
 
+    game.mode = "play";
     ui.shop.classList.add("hidden");
+    ui.armorMenu.classList.add("hidden");
+    ui.settingsMenu.classList.add("hidden");
     ui.death.classList.add("hidden");
 
     player.x = 1.6; player.y = 1.6; player.a = 0;
     player.hp = player.maxHp;
     player.stamina = player.staminaMax;
 
+    // restart current round
+    startRound(game.round, true);
+
     setHint("Restarted. Progress kept.", true, 4, 1.6);
     saveGame();
   });
+
+  // ---------- Round System ----------
+  function startRound(r, restart=false) {
+    game.round = r;
+    game.toSpawn = 8 + r * 3;        // round size grows
+    game.spawnBudget = game.toSpawn; // how many still need spawning
+    game.alive = 0;
+    game.betweenT = restart ? 0.6 : 2.2;
+
+    setHint(restart ? `Round ${r} restarted.` : `Round ${r} starting...`, true, 4, 1.4);
+  }
+
+  // start round 1 (or saved round)
+  startRound(game.round || 1, true);
 
   // ---------- Loop ----------
   let last = performance.now();
@@ -1600,17 +1779,19 @@
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
 
-    // UI sync
+    // UI
     ui.hp.textContent = Math.max(0, Math.floor(player.hp));
+    ui.hpMax.textContent = Math.floor(player.maxHp);
+    ui.armor.textContent = String(getTotalArmor());
     ui.cash.textContent = player.cash;
-    ui.wave.textContent = game.wave;
+    ui.round.textContent = game.round;
+    ui.alive.textContent = String(game.alive);
     ui.level.textContent = player.level;
     ui.xp.textContent = player.xp;
+    ui.scrap.textContent = player.scrap;
+    ui.essence.textContent = player.essence;
 
-    // stamina bar
     ui.stamFill.style.width = `${clamp(player.stamina / player.staminaMax, 0, 1) * 100}%`;
-
-    // chaser display
     ui.chasers.textContent = String(countChasers());
 
     if (player.usingKnife) {
@@ -1626,7 +1807,7 @@
       ui.mag.textContent = w ? w.magSize : "-";
     }
 
-    // mobile USE button
+    // mobile USE button visibility
     if (input.mobile) {
       const near = nearAnyMachine();
       if (near && game.mode === "play") ui.btnUse.classList.remove("hidden");
@@ -1639,23 +1820,17 @@
     saveTimer += dt;
     if (saveTimer >= 10) { saveTimer = 0; saveGame(); }
 
-    // timers
+    // cooldowns
     if (player.knife.t > 0) player.knife.t = Math.max(0, player.knife.t - dt);
     if (player.knife.swing > 0) player.knife.swing = Math.max(0, player.knife.swing - dt);
 
     if (game.mode !== "play") return;
 
-    // wave pacing
-    game.t += dt;
-    if (game.t > game.wave * 25) game.wave++;
-
     // reload
     const wpn = currentWeapon();
     if (!player.usingKnife && wpn && player.ammo.reloading) {
       player.ammo.rt += dt;
-
       const reloadTime = wpn.reloadTime * player.perkReloadMult;
-
       if (player.ammo.rt >= reloadTime) {
         const need = wpn.magSize - player.ammo.mag;
         const take = Math.min(need, player.ammo.reserve);
@@ -1668,8 +1843,8 @@
       }
     }
 
-    // look yaw
-    player.a += lookDelta * 0.0022;
+    // yaw look (sensitivity applies here)
+    player.a += lookDelta * 0.0022 * settings.sens;
     lookDelta = 0;
 
     // movement
@@ -1681,13 +1856,10 @@
       if (keys.has("a")) { mxv += Math.cos(player.a - Math.PI / 2); myv += Math.sin(player.a - Math.PI / 2); }
       if (keys.has("d")) { mxv += Math.cos(player.a + Math.PI / 2); myv += Math.sin(player.a + Math.PI / 2); }
     } else {
-      // joystick: forward/back + strafe using player angle
       const jx = input.joy.dx;
       const jy = input.joy.dy;
-      // jy down = positive, so invert for forward
       const f = -jy;
       const s = jx;
-
       mxv += Math.cos(player.a) * f + Math.cos(player.a + Math.PI/2) * s;
       myv += Math.sin(player.a) * f + Math.sin(player.a + Math.PI/2) * s;
     }
@@ -1695,9 +1867,12 @@
     const len = Math.hypot(mxv, myv) || 1;
     mxv /= len; myv /= len;
 
-    // sprint + stamina (mobile: auto-sprint if joystick pushed hard)
     const moving = (Math.abs(mxv) + Math.abs(myv)) > 0.01;
-    const wantsSprint = (!input.mobile && keys.has("shift")) || (input.mobile && (Math.hypot(input.joy.dx, input.joy.dy) > 0.85));
+
+    // sprint logic
+    const wantsSprintPC = (!input.mobile && keys.has("shift"));
+    const wantsSprintMobile = (input.mobile && settings.autoSprint && (Math.hypot(input.joy.dx, input.joy.dy) > 0.85));
+    const wantsSprint = wantsSprintPC || wantsSprintMobile;
 
     let moveSpeed = player.speed;
     if (wantsSprint && player.stamina > 1 && moving) {
@@ -1712,20 +1887,79 @@
     if (!isWall(nx, player.y)) player.x = nx;
     if (!isWall(player.x, ny)) player.y = ny;
 
-    // spawn zombies
-    const target = 6 + game.wave * 2;
-    if (zombies.length < target && Math.random() < 0.085 + game.wave * 0.002) spawnZombie();
+    // fire
+    if (!input.mobile) {
+      if (mouseDown) shoot();
+    } else {
+      if (input.firing) shoot();
+    }
 
-    // assign chasers (keeps only 4 global hunters)
+    // round pacing (between-round break)
+    if (game.betweenT > 0) {
+      game.betweenT -= dt;
+      if (game.betweenT <= 0) {
+        setHint(`ROUND ${game.round} LIVE. Survive.`, true, 3, 1.2);
+      }
+    }
+
+    // spawn zombies only after break ends
+    if (game.betweenT <= 0) {
+      if (game.spawnBudget > 0) {
+        // spawn rate ramps slightly with round
+        const spawnChance = 0.10 + game.round * 0.004;
+        if (Math.random() < spawnChance) {
+          const ok = spawnZombie();
+          if (ok) game.spawnBudget--;
+        }
+      }
+    }
+
+    // if round complete: no alive + none left to spawn
+    if (game.spawnBudget <= 0 && game.alive <= 0 && game.betweenT <= 0) {
+      startRound(game.round + 1, false);
+      saveGame();
+    }
+
+    // keep only 4 chasers
     assignChasers();
 
-    // build pathfinding flow field every 0.25s (chasers use this)
+    // flow field update
     game.flowTimer -= dt;
     if (game.flowTimer <= 0) {
       game.flowTimer = 0.25;
       game.flow = buildFlowFieldFromPlayer();
     }
     const flow = game.flow;
+
+    // bullets update + collision (THIS fixes your "must be close" issue)
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      b.life -= dt;
+      if (b.life <= 0) { bullets.splice(i, 1); continue; }
+
+      const nx = b.x + b.vx * dt;
+      const ny = b.y + b.vy * dt;
+
+      // wall hit
+      if (isWall(nx, ny)) { bullets.splice(i, 1); continue; }
+
+      b.x = nx; b.y = ny;
+
+      // zombie hit
+      let hit = null;
+      for (const z of zombies) {
+        if (dist(b.x, b.y, z.x, z.y) < (z.r + b.r)) { hit = z; break; }
+      }
+      if (hit) {
+        hit.hp -= b.dmg;
+        bullets.splice(i, 1);
+
+        if (hit.hp <= 0) {
+          handleZombieDeath(hit);
+          zombies = zombies.filter(z => z !== hit);
+        }
+      }
+    }
 
     // zombie AI
     for (let i = zombies.length - 1; i >= 0; i--) {
@@ -1735,7 +1969,6 @@
       const spBase = z.speed * (z.type === "runner" ? 1.18 : 1);
 
       if (z.role === "chaser") {
-        // chase using flow field
         const zx0 = Math.floor(z.x);
         const zy0 = Math.floor(z.y);
 
@@ -1760,7 +1993,6 @@
         if (!isWall(z.x, zy)) z.y = zy;
 
       } else {
-        // wander: pick a direction sometimes, bounce off walls
         z.thinkT -= dt;
         if (z.thinkT <= 0) {
           z.thinkT = rand(0.6, 1.4);
@@ -1772,7 +2004,6 @@
         const zx = z.x + Math.cos(ang) * step;
         const zy = z.y + Math.sin(ang) * step;
 
-        // bounce/turn if hit wall
         if (isWall(zx, z.y) || isWall(z.x, zy)) {
           z.wanderA += rand(1.2, 2.6);
         } else {
@@ -1780,7 +2011,7 @@
         }
       }
 
-      // damage if close
+      // attack if close
       const d = dist(player.x, player.y, z.x, z.y);
       if (d < 0.55 && z.hitCd <= 0) {
         z.hitCd = 0.6;
@@ -1792,42 +2023,10 @@
         player.hp -= finalDmg;
         player.lastHurtTime = performance.now() / 1000;
 
-        setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.9);
+        setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
         if (player.hp <= 0) die();
         saveGame();
       }
-    }
-
-    // mines: trigger + explode
-    for (let i = mines.length - 1; i >= 0; i--) {
-      const m = mines[i];
-      m.t -= dt;
-
-      let triggered = false;
-      for (const z of zombies) {
-        if (dist(m.x, m.y, z.x, z.y) < 0.45) { triggered = true; break; }
-      }
-
-      if (triggered) {
-        const R = 1.6;
-        for (let zi = zombies.length - 1; zi >= 0; zi--) {
-          const z = zombies[zi];
-          const d = dist(m.x, m.y, z.x, z.y);
-          if (d <= R) {
-            const dmg = 140 * (1 - d / R);
-            z.hp -= dmg;
-            if (z.hp <= 0) {
-              handleZombieDeath(z);
-              zombies.splice(zi, 1);
-            }
-          }
-        }
-        setHint("💥 Mine exploded!", true, 3, 1.0);
-        mines.splice(i, 1);
-        continue;
-      }
-
-      if (m.t <= 0) mines.splice(i, 1);
     }
 
     // pickups
@@ -1838,49 +2037,32 @@
       if (dist(player.x, player.y, d.x, d.y) < 0.55) {
         if (d.kind === "cash") {
           player.cash += d.amount;
-          setHint(`Picked up $${d.amount}.`, true, 2, 0.8);
+          setHint(`Picked up $${d.amount}.`, true, 2, 0.75);
         } else if (d.kind === "scrap") {
           player.scrap += d.amount;
-          setHint(`Picked up Scrap +${d.amount}.`, true, 2, 0.8);
+          setHint(`Picked up Scrap +${d.amount}.`, true, 2, 0.75);
         } else if (d.kind === "ess") {
           player.essence += d.amount;
-          setHint(`Picked up Essence +${d.amount}.`, true, 2, 0.8);
-        } else if (d.kind === "armor") {
-          const slot = d.piece.slot;
-          const cur = player.equip[slot];
-          if (!cur || d.piece.armor > cur.armor) {
-            player.equip[slot] = d.piece;
-            setHint(`Equipped drop: ${d.piece.name} (+${d.piece.armor})`, true, 3, 1.1);
-          } else {
-            setHint(`Found armor: ${d.piece.name} (not better)`, true, 2, 1.0);
-          }
+          setHint(`Picked up Essence +${d.amount}.`, true, 2, 0.75);
         }
-
         drops.splice(i, 1);
         saveGame();
         continue;
       }
-
       if (d.t <= 0) drops.splice(i, 1);
     }
 
-    // slow regen (only if not hit recently)
+    // slow regen
     const secondsNow = performance.now() / 1000;
     if (player.hp > 0 && player.hp < player.maxHp) {
       if (secondsNow - player.lastHurtTime >= player.regenDelay) {
         player.hp = Math.min(player.maxHp, player.hp + player.regenRate * dt);
       }
     }
-
-    // firing
-    if (!input.mobile) {
-      if (mouseDown) shoot();
-    } else {
-      if (input.firing) shoot();
-    }
   }
 
   // ---------- Start ----------
-  setHint("Play: Move and survive. Shop = Q. Perks = E. Sprint = Shift. Medkit = H. Mine = G.", true, 3, 2.0);
+  setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
   requestAnimationFrame(tick);
+
 })();
