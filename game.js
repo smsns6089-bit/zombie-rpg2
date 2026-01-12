@@ -273,7 +273,7 @@ addEventListener("mousemove", (e) => {
 
   // FPS-style pitch: moving mouse up looks up (invert if you want opposite)
   const my = (e.movementY || 0);
-  player.pitch = clamp(player.pitch + my * 0.0022, -0.9, 0.9);
+  player.pitch = clamp(player.pitch - my * 0.0022, -0.9, 0.9);
 });
 
 const keys = new Set();
