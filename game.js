@@ -1,12 +1,13 @@
-// Project Game Maker: Zombie RPG FPS (Raycast) - FULL VERSION
-// Includes: pitch look, head/body/leg damage, better groan, wall-mounted shop kiosk, grounded sprites,
-// different gun models per weapon, saving (localStorage), Q shop pause.
+// Project Game Maker: Zombie RPG FPS (Raycast) - FULL VERSION (MP3 Groan)
+// Includes: pitch look, head/body/leg damage, wall-mounted shop kiosk, grounded sprites,
+// different gun models per weapon, saving (localStorage), Q shop pause,
+// and REAL zombie groan MP3 at: assets/sfx/zombie_groan.mp3
 
 // ---------- Canvas ----------
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// ---------- UI ----------
+// ---------- UI (expects these IDs in index.html) ----------
 const ui = {
   hp: document.getElementById("hp"),
   weapon: document.getElementById("weapon"),
@@ -27,6 +28,7 @@ const ui = {
   restart: document.getElementById("restart"),
 };
 
+// ---------- Helpers ----------
 function fit() {
   const dpr = Math.max(1, Math.min(2, devicePixelRatio || 1));
   canvas.width = Math.floor(innerWidth * dpr);
@@ -44,11 +46,12 @@ function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 function rand(a, b) { return a + Math.random() * (b - a); }
 
 function setHint(t, ok = false) {
+  if (!ui.hint) return;
   ui.hint.textContent = t || "";
   ui.hint.style.borderColor = ok ? "rgba(34,197,94,.35)" : "rgba(255,255,255,.08)";
 }
 
-// ---------- AUDIO ----------
+// ---------- AUDIO (WebAudio for gun/hit + MP3 for groan) ----------
 let audio = { ctx: null, master: null, enabled: true };
 
 function ensureAudio() {
@@ -62,9 +65,23 @@ function ensureAudio() {
     return true;
   } catch { return false; }
 }
+
+const GROAN_SRC = "assets/sfx/zombie_groan.mp3";
+const groanAudio = new Audio(GROAN_SRC);
+groanAudio.preload = "auto";
+groanAudio.volume = 0.35;
+
 function userGesture() {
   ensureAudio();
   if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume().catch(()=>{});
+
+  // prime MP3 (some browsers need a user gesture before any audio plays)
+  try {
+    groanAudio.play().then(() => {
+      groanAudio.pause();
+      groanAudio.currentTime = 0;
+    }).catch(()=>{});
+  } catch {}
 }
 addEventListener("mousedown", userGesture, { passive:true });
 addEventListener("keydown", userGesture, { passive:true });
@@ -76,14 +93,11 @@ function playNoise(duration = 0.18, gain = 0.18, hp = 50, lp = 800) {
   const len = Math.floor(ac.sampleRate * duration);
   const buf = ac.createBuffer(1, len, ac.sampleRate);
   const data = buf.getChannelData(0);
-
   for (let i = 0; i < len; i++) {
     const t = i / len;
-    // “breathy” noise: smoother than harsh random
-    const r = (Math.random()*2 - 1);
+    const r = (Math.random() * 2 - 1);
     data[i] = r * (0.9 - t) * 0.9;
   }
-
   const src = ac.createBufferSource();
   src.buffer = buf;
 
@@ -125,7 +139,6 @@ function playTone(freq = 120, duration = 0.14, gain = 0.12, type = "sawtooth") {
 }
 
 function sfxGun() {
-  // Keep your pop
   playTone(160, 0.05, 0.16, "square");
   playTone(95, 0.05, 0.10, "sawtooth");
   playNoise(0.05, 0.14, 1200, 9000);
@@ -136,14 +149,24 @@ function sfxHit() {
   playTone(120, 0.05, 0.08, "sine");
 }
 
-function sfxZombieGroan(dToPlayer = 6) {
-  // More “rrrr” groan: low tones + breathy noise
-  const vol = clamp(1 - dToPlayer / 10, 0, 1) * 0.22;
-  if (vol <= 0.01) return;
+// MP3 GROAN
+function playGroanMP3(dToPlayer = 6) {
+  if (!audio.enabled) return;
 
-  playTone(62 + rand(-4,4), 0.22, vol * 0.55, "sawtooth");
-  playTone(92 + rand(-6,6), 0.18, vol * 0.35, "triangle");
-  playNoise(0.25, vol * 0.35, 40, 520);
+  const vol = clamp(1 - dToPlayer / 10, 0, 1) * 0.55;
+  if (vol <= 0.02) return;
+
+  try {
+    groanAudio.pause();
+    groanAudio.currentTime = 0;
+    groanAudio.volume = clamp(vol, 0, 0.85);
+    groanAudio.playbackRate = 0.92 + Math.random() * 0.18;
+    groanAudio.play().catch(()=>{});
+  } catch {}
+}
+
+function sfxZombieGroan(dToPlayer = 6) {
+  playGroanMP3(dToPlayer);
 }
 
 // ---------- SAVE ----------
@@ -151,9 +174,9 @@ const SAVE_KEY = "pgm_zombie_rpg_save_v2";
 function xpToNext(level) {
   return Math.floor(60 + (level - 1) * 40 + Math.pow(level - 1, 1.35) * 25);
 }
+
 function saveGame() {
   try {
-    // store weapon ammo inside weapon obj
     for (const w of player.slots) {
       if (!w) continue;
       w._mag = w._mag ?? w.magSize;
@@ -175,6 +198,7 @@ function saveGame() {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {}
 }
+
 function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -227,14 +251,19 @@ let lookDelta = 0;
 
 // ---------- Controls ----------
 function lockPointer() { canvas.requestPointerLock?.(); }
+
 document.addEventListener("pointerlockchange", () => {
   game.pointerLocked = (document.pointerLockElement === canvas);
 });
+
 addEventListener("mousedown", (e) => {
   if (e.button === 0) mouseDown = true;
   if (!game.pointerLocked && game.mode === "play") lockPointer();
 });
-addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
+
+addEventListener("mouseup", (e) => {
+  if (e.button === 0) mouseDown = false;
+});
 
 addEventListener("mousemove", (e) => {
   if (!game.pointerLocked) return;
@@ -242,7 +271,7 @@ addEventListener("mousemove", (e) => {
 
   lookDelta += (e.movementX || 0);
 
-  // look up/down
+  // FPS-style pitch: moving mouse up looks up (invert if you want opposite)
   const my = (e.movementY || 0);
   player.pitch = clamp(player.pitch + my * 0.0022, -0.9, 0.9);
 });
@@ -306,11 +335,10 @@ function isWall(x, y) {
 
 // ---------- Shop kiosk (WALL-MOUNTED) ----------
 const shopKiosk = {
-  // attached to wall area near start
   x: 2.05,
   y: 1.25,
   r: 1.15,
-  facing: Math.PI / 2, // decorative, for billboard tilt look
+  facing: Math.PI / 2,
 };
 
 function nearShopKiosk() {
@@ -330,7 +358,7 @@ function W(id){ return WEAPONS.find(w => w.id === id); }
 const player = {
   x: 1.6, y: 1.6,
   a: 0,
-  pitch: 0, // look up/down
+  pitch: 0,
   fov: Math.PI / 3,
 
   hp: 100, maxHp: 100,
@@ -355,6 +383,7 @@ function currentWeapon() {
   if (player.usingKnife) return null;
   return player.slots[player.activeSlot];
 }
+
 function syncAmmoToWeapon(w) {
   if (!w) return;
   if (w._mag == null) w._mag = w.magSize;
@@ -365,7 +394,7 @@ function syncAmmoToWeapon(w) {
   player.ammo.reloading = false;
   player.ammo.rt = 0;
 
-  ui.mag.textContent = w.magSize;
+  if (ui.mag) ui.mag.textContent = w.magSize;
 }
 function saveAmmoFromWeapon(w) {
   if (!w) return;
@@ -403,28 +432,32 @@ loadGame();
 // ---------- SHOP ----------
 function openShop() {
   game.mode = "shop";
-  ui.shop.classList.remove("hidden");
-  ui.death.classList.add("hidden");
+  if (ui.shop) ui.shop.classList.remove("hidden");
+  if (ui.death) ui.death.classList.add("hidden");
   renderShop();
   setHint("SHOP OPEN (paused). Q / ESC to close.", true);
   saveGame();
 }
+
 function closeShop() {
   game.mode = "play";
-  ui.shop.classList.add("hidden");
+  if (ui.shop) ui.shop.classList.add("hidden");
   setHint("Back to surviving.", true);
   saveGame();
 }
-ui.closeShop.addEventListener("click", closeShop);
+
+if (ui.closeShop) ui.closeShop.addEventListener("click", closeShop);
 
 function ownsWeapon(id) {
   return player.slots.some(s => s && s.id === id) || id === "pistol_rusty";
 }
+
 function canBuyWeapon(w) {
   if (player.level < w.unlockLevel) return { ok:false, why:`Requires Lv ${w.unlockLevel}` };
   if (player.cash < w.price) return { ok:false, why:`Need $${w.price}` };
   return { ok:true, why:"Buy" };
 }
+
 function giveWeapon(id) {
   const w = structuredClone(W(id));
   player.slots[1] = w;
@@ -445,6 +478,7 @@ function shopButton({title, desc, price, onClick, locked=false, lockText=""}) {
 }
 
 function renderShop() {
+  if (!ui.shopList) return;
   ui.shopList.innerHTML = "";
 
   ui.shopList.appendChild(shopButton({
@@ -578,6 +612,7 @@ function knifeAttack() {
     while (da > Math.PI) da -= Math.PI*2;
     while (da < -Math.PI) da += Math.PI*2;
     if (Math.abs(da) > 0.55) continue;
+
     if (d < bestD) { bestD = d; best = z; }
   }
 
@@ -592,10 +627,9 @@ function knifeAttack() {
       dropCash(best.x, best.y, cash);
       gainXP(xp);
       zombies = zombies.filter(z => z !== best);
-      player.cash += 0; // just explicit
       setHint(`KNIFE KILL! +$${cash}, +${xp} XP`, true);
     } else {
-      setHint(`Knife hit!`, true);
+      setHint("Knife hit!", true);
     }
   }
 }
@@ -645,7 +679,7 @@ function shoot() {
     if (hitZ) {
       didHit = true;
 
-      // hitzones based on crosshair Y against projected sprite
+      // hitzones by projected sprite Y
       const hgt = innerHeight;
       const horizon = (hgt / 2) + (player.pitch * (hgt * 0.35));
       const spriteSize = clamp((hgt * 0.90) / (dist(player.x, player.y, hitZ.x, hitZ.y) + 0.001), 12, hgt * 1.25);
@@ -653,12 +687,12 @@ function shoot() {
       const spriteTop = spriteBottom - spriteSize;
 
       const crossY = hgt / 2;
-      const yRel = (crossY - spriteTop) / spriteSize; // 0 top -> 1 bottom
+      const yRel = (crossY - spriteTop) / spriteSize;
 
       let mult = 1.0;
       let label = "";
       if (yRel < 0.28) { mult = 1.8; label = "HEADSHOT"; }
-      else if (yRel > 0.78) { mult = 0.65; label = "Leg shot"; }
+      else if (yRel > 0.78) { mult = 0.65; label = "LEG SHOT"; }
 
       const dmg = w.dmg * player.dmgMult * mult;
       hitZ.hp -= dmg;
@@ -675,9 +709,7 @@ function shoot() {
     }
   }
 
-  if (didHit) {
-    sfxHit();
-  }
+  if (didHit) sfxHit();
 
   const cw = currentWeapon();
   if (cw) saveAmmoFromWeapon(cw);
@@ -698,7 +730,6 @@ function castRay(angle) {
 // ---------- Minimap ----------
 function drawMinimap() {
   const w = innerWidth;
-
   const size = 170;
   const pad = 14;
   const x0 = w - size - pad;
@@ -710,11 +741,11 @@ function drawMinimap() {
   ctx.strokeStyle = "rgba(255,255,255,.12)";
   ctx.strokeRect(x0 - 8, y0 - 8, size + 16, size + 16);
 
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      if (map[y][x] === 1) {
+  for (let yy = 0; yy < MAP_H; yy++) {
+    for (let xx = 0; xx < MAP_W; xx++) {
+      if (map[yy][xx] === 1) {
         ctx.fillStyle = "rgba(255,255,255,.18)";
-        ctx.fillRect(x0 + x * cell, y0 + y * cell, cell, cell);
+        ctx.fillRect(x0 + xx * cell, y0 + yy * cell, cell, cell);
       }
     }
   }
@@ -747,7 +778,7 @@ function drawMinimap() {
   ctx.stroke();
 }
 
-// ---------- Gun model (fixed forward + per weapon) ----------
+// ---------- Gun model (forward) ----------
 function gunStyleFor(id) {
   if (id === "pistol_rusty") {
     return { body:"rgba(60,70,85,.96)", dark:"rgba(22,26,34,.98)", accent:"rgba(170,120,60,.85)", bodyLen:118, barrelLen:22 };
@@ -776,9 +807,9 @@ function drawGunModel(dt) {
   const rx = game.recoil * 22;
   const ry = game.recoil * 16;
 
-  // centered and forward
-  const baseX = w * 0.56 + rx;
-  const baseY = h * 0.74 + bob + ry;
+  // bottom-right-ish, pointing forward (toward center)
+  const baseX = w * 0.58 + rx;
+  const baseY = h * 0.76 + bob + ry;
 
   const cw = currentWeapon();
   const sid = cw ? cw.id : "knife";
@@ -786,9 +817,10 @@ function drawGunModel(dt) {
 
   ctx.save();
   ctx.globalAlpha = 0.98;
-
   ctx.translate(baseX, baseY);
-  ctx.rotate(-0.06);
+
+  // slight angle so barrel points toward center (not sky)
+  ctx.rotate(-0.08);
 
   // arm
   ctx.fillStyle = "rgba(190,150,120,.92)";
@@ -827,7 +859,7 @@ function drawGunModel(dt) {
     ctx.fill();
   }
 
-  // knife swing overlay
+  // knife swipe overlay
   if (player.usingKnife && player.knife.swing > 0) {
     const t = player.knife.swing / 0.14;
     ctx.fillStyle = `rgba(220,220,230,${0.28 * t})`;
@@ -837,15 +869,13 @@ function drawGunModel(dt) {
   ctx.restore();
 }
 
-// ---------- Kiosk billboard (wall mounted) ----------
+// ---------- Kiosk billboard ----------
 function drawShopKioskBillboard(screenX, top, size) {
   const left = screenX - size / 2;
 
-  // wall plate
   ctx.fillStyle = "rgba(30,34,44,.94)";
   ctx.fillRect(left + size*0.12, top + size*0.20, size*0.76, size*0.60);
 
-  // green sign (attached)
   ctx.fillStyle = "rgba(34,197,94,.95)";
   ctx.fillRect(left + size*0.18, top + size*0.22, size*0.64, size*0.18);
 
@@ -853,11 +883,9 @@ function drawShopKioskBillboard(screenX, top, size) {
   ctx.font = `bold ${Math.max(10, size*0.12)}px system-ui`;
   ctx.fillText("SHOP", left + size*0.28, top + size*0.34);
 
-  // slot / counter
   ctx.fillStyle = "rgba(255,255,255,.18)";
   ctx.fillRect(left + size*0.24, top + size*0.52, size*0.52, size*0.06);
 
-  // little glow
   ctx.fillStyle = "rgba(34,197,94,.18)";
   ctx.fillRect(left + size*0.18, top + size*0.22, size*0.64, size*0.58);
 }
@@ -901,7 +929,7 @@ function render(dt) {
     }
   }
 
-  // sprites (zombies + cash + kiosk)
+  // sprites
   const sprites = [];
   for (const z of zombies) sprites.push({ kind: "z", ...z, d: dist(player.x, player.y, z.x, z.y) });
   for (const d of drops) sprites.push({ kind: "d", ...d, d: dist(player.x, player.y, d.x, d.y) });
@@ -1013,22 +1041,22 @@ function render(dt) {
 // ---------- Death ----------
 function die() {
   game.mode = "dead";
-  ui.shop.classList.add("hidden");
-  ui.death.classList.remove("hidden");
+  if (ui.shop) ui.shop.classList.add("hidden");
+  if (ui.death) ui.death.classList.remove("hidden");
   setHint("You died. Click Restart.", false);
   document.exitPointerLock?.();
   saveGame();
 }
 
-ui.restart.addEventListener("click", () => {
+if (ui.restart) ui.restart.addEventListener("click", () => {
   zombies = [];
   drops = [];
   game.wave = 1;
   game.t = 0;
   game.mode = "play";
 
-  ui.shop.classList.add("hidden");
-  ui.death.classList.add("hidden");
+  if (ui.shop) ui.shop.classList.add("hidden");
+  if (ui.death) ui.death.classList.add("hidden");
 
   player.x = 1.6; player.y = 1.6; player.a = 0;
   player.hp = player.maxHp;
@@ -1047,23 +1075,23 @@ function tick(now) {
   last = now;
 
   // UI sync
-  ui.hp.textContent = Math.max(0, Math.floor(player.hp));
-  ui.cash.textContent = player.cash;
-  ui.wave.textContent = game.wave;
-  ui.level.textContent = player.level;
-  ui.xp.textContent = player.xp;
+  if (ui.hp) ui.hp.textContent = Math.max(0, Math.floor(player.hp));
+  if (ui.cash) ui.cash.textContent = player.cash;
+  if (ui.wave) ui.wave.textContent = game.wave;
+  if (ui.level) ui.level.textContent = player.level;
+  if (ui.xp) ui.xp.textContent = player.xp;
 
   if (player.usingKnife) {
-    ui.weapon.textContent = "Knife";
-    ui.ammo.textContent = "-";
-    ui.mag.textContent = "-";
-    ui.reserve.textContent = "-";
+    if (ui.weapon) ui.weapon.textContent = "Knife";
+    if (ui.ammo) ui.ammo.textContent = "-";
+    if (ui.mag) ui.mag.textContent = "-";
+    if (ui.reserve) ui.reserve.textContent = "-";
   } else {
     const w = currentWeapon();
-    ui.weapon.textContent = w ? w.name : "None";
-    ui.ammo.textContent = player.ammo.mag;
-    ui.reserve.textContent = player.ammo.reserve;
-    ui.mag.textContent = w ? w.magSize : "-";
+    if (ui.weapon) ui.weapon.textContent = w ? w.name : "None";
+    if (ui.ammo) ui.ammo.textContent = player.ammo.mag;
+    if (ui.reserve) ui.reserve.textContent = player.ammo.reserve;
+    if (ui.mag) ui.mag.textContent = w ? w.magSize : "-";
   }
 
   render(dt);
@@ -1085,7 +1113,7 @@ function tick(now) {
   game.t += dt;
   if (game.t > game.wave * 25) game.wave++;
 
-  // reload
+  // reload finish
   const wpn = currentWeapon();
   if (!player.usingKnife && wpn && player.ammo.reloading) {
     player.ammo.rt += dt;
@@ -1134,7 +1162,7 @@ function tick(now) {
     if (z.groanT <= 0) {
       z.groanT = rand(2.2, 5.6);
       const d = dist(player.x, player.y, z.x, z.y);
-      sfxZombieGroan(d);
+      sfxZombieGroan(d); // MP3
     }
 
     const ang = Math.atan2(player.y - z.y, player.x - z.x);
