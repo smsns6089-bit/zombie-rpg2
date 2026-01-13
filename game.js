@@ -2264,11 +2264,16 @@ for (let i = zombies.length - 1; i >= 0; i--) {
   }
 
   // ---------- moan scheduling + stereo pan ----------
-  z.moanT -= dt;
-  if (z.moanT <= 0) {
-    const d = dist(player.x, player.y, z.x, z.y);
+z.moanT -= dt;
+if (z.moanT <= 0) {
+  const d = dist(player.x, player.y, z.x, z.y);
 
-    if (d < 14.5) {
+  // only moan if near-ish
+  if (d < 14.5) {
+    // if audio isn’t ready yet, try again soon (don’t wait 5 seconds)
+    if (!audio.unlocked || !audio.zombieBuf) {
+      z.moanT = rand(0.25, 0.75);
+    } else {
       // angle from player -> zombie, compared to your view angle
       const angTo = Math.atan2(z.y - player.y, z.x - player.x);
       let da = angTo - player.a;
@@ -2280,38 +2285,44 @@ for (let i = zombies.length - 1; i >= 0; i--) {
 
       // chance increases as zombie gets closer
       const pClose = clamp(1 - d / 14.5, 0, 1);
-      const chance = 0.35 + pClose * 0.55;
+      const chance = 0.28 + pClose * 0.62;
 
-      if (Math.random() < chance) {
-        // IMPORTANT: this expects your function signature:
-        // playZombieMoan(distanceToPlayer, isRunner=false, isChaser=false, pan=0)
+      // global anti-spam (keeps it audible, not a machine gun of moans)
+      const nowS = performance.now() / 1000;
+      const okGlobal = (nowS - (audio.lastMoanT || 0)) > 0.20;
+
+      if (okGlobal && Math.random() < chance) {
+        audio.lastMoanT = nowS;
         playZombieMoan(d, isRunner, isChaser, pan);
       }
+
+      // next moan time
+      z.moanT =
+        rand(2.2, 5.8) *
+        (isRunner ? 0.85 : 1.0) *
+        (isChaser ? 0.85 : 1.0);
     }
-
-    // next moan time (runners/chasers moan a bit more often)
-    z.moanT =
-      rand(2.2, 5.8) *
-      (isRunner ? 0.85 : 1.0) *
-      (isChaser ? 0.85 : 1.0);
+  } else {
+    // far away: moan less often
+    z.moanT = rand(4.0, 7.0);
   }
+}
 
-  // ---------- attack player ----------
-  const dToPlayer = dist(player.x, player.y, z.x, z.y);
-  if (dToPlayer < 0.55 && z.hitCd <= 0) {
-    z.hitCd = 0.6;
+// ---------- attack player ----------
+const dToPlayer = dist(player.x, player.y, z.x, z.y);
+if (dToPlayer < 0.55 && z.hitCd <= 0) {
+  z.hitCd = 0.6;
 
-    const armor = getTotalArmor();
-    const reduction = clamp(armor * 0.02, 0, 0.60);
-    const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
+  const armor = getTotalArmor();
+  const reduction = clamp(armor * 0.02, 0, 0.60);
+  const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
 
-    player.hp -= finalDmg;
-    player.lastHurtTime = performance.now() / 1000;
+  player.hp -= finalDmg;
+  player.lastHurtTime = performance.now() / 1000;
 
-    setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
-    if (player.hp <= 0) die();
-    saveGame();
-  }
+  setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
+  if (player.hp <= 0) die();
+  saveGame();
 }
 
 
