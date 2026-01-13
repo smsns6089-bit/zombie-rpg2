@@ -1383,12 +1383,12 @@
     const bob = moving ? Math.sin(t * 7.0) * 3.0 : 0;
     const sway = moving ? Math.sin(t * 3.5) * 2.0 : 0;
 
-    const rx = game.recoil * 10;
-    const ry = game.recoil * 18;
+   const rx = game.recoil * 22;
+const ry = game.recoil * 16;
 
-  const baseX = w * 0.60 + sway * 0.35; // move gun right
-  
-    const baseY = h * 0.80 + bob + ry;
+ // COD-style position (bottom-right)
+const baseX = w * 0.73 + rx;           // MORE RIGHT
+const baseY = h * 0.84 + bob + ry;     // LOWER
 
     const cw = currentWeapon();
     const sid = cw ? cw.id : "knife";
