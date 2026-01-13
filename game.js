@@ -2207,112 +2207,107 @@
       }
     }
 
-// zombies update + MOANS (FIXED + CLOSED BRACES)
-for (let i = zombies.length - 1; i >= 0; i--) {
-  const z = zombies[i];
+    // zombies update + MOANS (FIXED + CLOSED BRACES)
+    for (let i = zombies.length - 1; i >= 0; i--) {
+      const z = zombies[i];
 
-  z.hitCd = Math.max(0, z.hitCd - dt);
+      z.hitCd = Math.max(0, z.hitCd - dt);
 
-  const isRunner = (z.type === "runner");
-  const isChaser = (z.role === "chaser");
-  const spBase = z.speed * (isRunner ? 1.18 : 1);
+      const isRunner = (z.type === "runner");
+      const isChaser = (z.role === "chaser");
+      const spBase = z.speed * (isRunner ? 1.18 : 1);
 
-  // ---------- movement ----------
-  if (isChaser) {
-    const zx0 = Math.floor(z.x);
-    const zy0 = Math.floor(z.y);
+      // ---------- movement ----------
+      if (isChaser) {
+        const zx0 = Math.floor(z.x);
+        const zy0 = Math.floor(z.y);
 
-    let bestCell = [zx0, zy0];
-    let bestVal = (flow && flow[zy0] && flow[zy0][zx0] != null) ? flow[zy0][zx0] : 9999;
+        let bestCell = [zx0, zy0];
+        let bestVal = (game.flow && game.flow[zy0] && game.flow[zy0][zx0] != null) ? game.flow[zy0][zx0] : 9999;
 
-    const opts = [[zx0+1,zy0],[zx0-1,zy0],[zx0,zy0+1],[zx0,zy0-1]];
-    for (const [cx, cy] of opts) {
-      if (!inBounds(cx, cy)) continue;
-      if (world.map[cy][cx] === 1) continue;
-      const v = (flow && flow[cy] && flow[cy][cx] != null) ? flow[cy][cx] : 9999;
-      if (v < bestVal) { bestVal = v; bestCell = [cx, cy]; }
-    }
+        const opts = [[zx0+1,zy0],[zx0-1,zy0],[zx0,zy0+1],[zx0,zy0-1]];
+        for (const [cx, cy] of opts) {
+          if (!inBounds(cx, cy)) continue;
+          if (world.map[cy][cx] === 1) continue;
+          const v = (game.flow && game.flow[cy] && game.flow[cy][cx] != null) ? game.flow[cy][cx] : 9999;
+          if (v < bestVal) { bestVal = v; bestCell = [cx, cy]; }
+        }
 
-    const tx = bestCell[0] + 0.5;
-    const ty = bestCell[1] + 0.5;
+        const tx = bestCell[0] + 0.5;
+        const ty = bestCell[1] + 0.5;
 
-    const ang = Math.atan2(ty - z.y, tx - z.x);
-    const nx = z.x + Math.cos(ang) * spBase * dt;
-    const ny = z.y + Math.sin(ang) * spBase * dt;
-    if (!isWall(nx, z.y)) z.x = nx;
-    if (!isWall(z.x, ny)) z.y = ny;
-  } else {
-    z.thinkT -= dt;
-    if (z.thinkT <= 0) {
-      z.thinkT = rand(0.6, 1.4);
-      z.wanderA += rand(-1.2, 1.2);
-    }
+        const ang = Math.atan2(ty - z.y, tx - z.x);
+        const nx = z.x + Math.cos(ang) * spBase * dt;
+        const ny = z.y + Math.sin(ang) * spBase * dt;
+        if (!isWall(nx, z.y)) z.x = nx;
+        if (!isWall(z.x, ny)) z.y = ny;
+      } else {
+        z.thinkT -= dt;
+        if (z.thinkT <= 0) {
+          z.thinkT = rand(0.6, 1.4);
+          z.wanderA += rand(-1.2, 1.2);
+        }
 
-    const ang = z.wanderA;
-    const step = spBase * 0.55 * dt;
-    const nx = z.x + Math.cos(ang) * step;
-    const ny = z.y + Math.sin(ang) * step;
+        const ang = z.wanderA;
+        const step = spBase * 0.55 * dt;
+        const nx = z.x + Math.cos(ang) * step;
+        const ny = z.y + Math.sin(ang) * step;
 
-    if (isWall(nx, z.y) || isWall(z.x, ny)) {
-      z.wanderA += rand(1.2, 2.6);
-    } else {
-      z.x = nx;
-      z.y = ny;
-    }
-  }
-
-  // ---------- moan scheduling ----------
-  z.moanT -= dt;
-  if (z.moanT <= 0) {
-    const d = dist(player.x, player.y, z.x, z.y);
-
-    if (d < 14.5 && audio.unlocked) {
-      // angle from player -> zombie, compared to your view angle
-      const angTo = Math.atan2(z.y - player.y, z.x - player.x);
-      let da = angTo - player.a;
-      while (da > Math.PI) da -= Math.PI * 2;
-      while (da < -Math.PI) da += Math.PI * 2;
-
-      // (we’re not using pan yet in your current procedural audio, but this keeps the math ready)
-      const pClose = clamp(1 - d / 14.5, 0, 1);
-      const chance = 0.28 + pClose * 0.62;
-
-      const nowS = performance.now() / 1000;
-      const okGlobal = (nowS - (audio.lastMoanT || 0)) > 0.20;
-
-      if (okGlobal && Math.random() < chance) {
-        audio.lastMoanT = nowS;
-        // your current playZombieMoan takes 3 args in this file:
-        playZombieMoan(d, isRunner, isChaser);
+        if (isWall(nx, z.y) || isWall(z.x, ny)) {
+          z.wanderA += rand(1.2, 2.6);
+        } else {
+          z.x = nx;
+          z.y = ny;
+        }
       }
-    }
 
-    z.moanT =
-      rand(2.2, 5.8) *
-      (isRunner ? 0.85 : 1.0) *
-      (isChaser ? 0.85 : 1.0);
-  }
+      // ---------- moan scheduling ----------
+      z.moanT -= dt;
+      if (z.moanT <= 0) {
+        const d = dist(player.x, player.y, z.x, z.y);
 
-  // ---------- attack player ----------
-  const dToPlayer = dist(player.x, player.y, z.x, z.y);
-  if (dToPlayer < 0.55 && z.hitCd <= 0) {
-    z.hitCd = 0.6;
+        if (d < 14.5 && audio.unlocked) {
+          const pClose = clamp(1 - d / 14.5, 0, 1);
+          const chance = 0.28 + pClose * 0.62;
 
-    const armor = getTotalArmor();
-    const reduction = clamp(armor * 0.02, 0, 0.60);
-    const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
+          const nowS = performance.now() / 1000;
+          const okGlobal = (nowS - (audio.lastMoanT || 0)) > 0.20;
 
-    player.hp -= finalDmg;
-    player.lastHurtTime = performance.now() / 1000;
+          if (okGlobal && Math.random() < chance) {
+            audio.lastMoanT = nowS;
+            playZombieMoan(d, isRunner, isChaser);
+          }
+        }
 
-    setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
-    if (player.hp <= 0) die();
-    saveGame();
-  }
-} // ✅ CLOSES the zombies for-loop
+        z.moanT =
+          rand(2.2, 5.8) *
+          (isRunner ? 0.85 : 1.0) *
+          (isChaser ? 0.85 : 1.0);
+      }
 
-// ---------- Start ----------
-setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
-requestAnimationFrame(tick);
+      // ---------- attack player ----------
+      const dToPlayer = dist(player.x, player.y, z.x, z.y);
+      if (dToPlayer < 0.55 && z.hitCd <= 0) {
+        z.hitCd = 0.6;
 
-})(); // ✅ CLOSES the IIFE
+        const armor = getTotalArmor();
+        const reduction = clamp(armor * 0.02, 0, 0.60);
+        const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
+
+        player.hp -= finalDmg;
+        player.lastHurtTime = performance.now() / 1000;
+
+        setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
+        if (player.hp <= 0) die();
+        saveGame();
+      }
+    } // ✅ CLOSES zombies loop
+
+  } // ✅ CLOSES tick(now)
+
+  // ✅ Start loop ONCE (outside tick)
+  setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
+  requestAnimationFrame(tick);
+
+})(); // ✅ CLOSES the IIFE (must be the last line)
+
