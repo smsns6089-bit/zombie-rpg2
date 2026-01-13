@@ -2207,7 +2207,7 @@
       }
     }
 
-    // zombies update + MOANS (FIXED + CLOSED BRACES)
+     // zombies update + MOANS (FIXED + CLOSED BRACES)
     for (let i = zombies.length - 1; i >= 0; i--) {
       const z = zombies[i];
 
@@ -2223,13 +2223,19 @@
         const zy0 = Math.floor(z.y);
 
         let bestCell = [zx0, zy0];
-        let bestVal = (game.flow && game.flow[zy0] && game.flow[zy0][zx0] != null) ? game.flow[zy0][zx0] : 9999;
+        let bestVal =
+          (game.flow && game.flow[zy0] && game.flow[zy0][zx0] != null)
+            ? game.flow[zy0][zx0]
+            : 9999;
 
         const opts = [[zx0+1,zy0],[zx0-1,zy0],[zx0,zy0+1],[zx0,zy0-1]];
         for (const [cx, cy] of opts) {
           if (!inBounds(cx, cy)) continue;
           if (world.map[cy][cx] === 1) continue;
-          const v = (game.flow && game.flow[cy] && game.flow[cy][cx] != null) ? game.flow[cy][cx] : 9999;
+          const v =
+            (game.flow && game.flow[cy] && game.flow[cy][cx] != null)
+              ? game.flow[cy][cx]
+              : 9999;
           if (v < bestVal) { bestVal = v; bestCell = [cx, cy]; }
         }
 
@@ -2241,6 +2247,7 @@
         const ny = z.y + Math.sin(ang) * spBase * dt;
         if (!isWall(nx, z.y)) z.x = nx;
         if (!isWall(z.x, ny)) z.y = ny;
+
       } else {
         z.thinkT -= dt;
         if (z.thinkT <= 0) {
@@ -2301,13 +2308,16 @@
         if (player.hp <= 0) die();
         saveGame();
       }
-    } // ✅ CLOSES zombies loop
+    } // closes zombies loop
+  } // closes tick(now)
 
-  } // ✅ CLOSES tick(now)
-
-  // ✅ Start loop ONCE (outside tick)
-  setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
+  // Start loop ONCE (outside tick)
+  setHint(
+    "Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.",
+    true, 3, 2.2
+  );
   requestAnimationFrame(tick);
 
-})(); // ✅ CLOSES the IIFE (must be the last line)
+})(); // END IIFE (THIS MUST BE THE FINAL LINE)
+
 
