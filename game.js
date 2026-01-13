@@ -1,13 +1,7 @@
-// Project Game Maker: Zombie RPG FPS (Raycast) - FULL REWRITE v5
-// - Round-based zombies
-// - Only 4 global chasers hunt you; others wander
-// - Scraps + Essence drops (NO armor drops)
-// - Armor Station: craft/equip/upgrade armor (grindy)
-// - COD-style Perk Machines
-// - Settings button (top-right): Input Mode Auto/PC/Mobile (saved), sensitivity, mobile auto-sprint
-// - Mobile: left joystick + reload button, right drag look, right tap shoots
-// - Visible bullet projectiles (tiny dark balls) with long range + proper hit detection
-// GitHub Pages friendly. No libraries.
+// Project Game Maker: Zombie RPG FPS (Raycast) - FULL REWRITE v5.1
+// CHANGES in v5.1:
+// - New forward-facing gun model (centered sight picture) to replace the side-tilt blocky gun
+// Everything else kept the same.
 
 (() => {
   "use strict";
@@ -280,10 +274,9 @@
     return sum;
   }
 
-  // Inventory (armor pieces you own)
   function addArmorToInventory(piece) {
     player.armorInv.push(piece);
-    if (player.armorInv.length > 28) player.armorInv.shift(); // keep it simple
+    if (player.armorInv.length > 28) player.armorInv.shift();
   }
 
   // ---------- Player ----------
@@ -382,12 +375,11 @@
     mode: "play",
     pointerLocked: false,
 
-    // round system
     round: 1,
     alive: 0,
     toSpawn: 0,
     spawnBudget: 0,
-    betweenT: 0, // between-round timer
+    betweenT: 0,
 
     recoil: 0,
     muzzle: 0,
@@ -406,11 +398,9 @@
       }
 
       const data = {
-        // progression
         cash: player.cash, level: player.level, xp: player.xp,
         round: game.round,
 
-        // weapons
         slotIds: player.slots.map(w => (w ? w.id : null)),
         activeSlot: player.activeSlot,
         usingKnife: player.usingKnife,
@@ -418,15 +408,12 @@
           player.slots.filter(Boolean).map(w => [w.id, { _mag: w._mag, _reserve: w._reserve }])
         ),
 
-        // materials
         scrap: player.scrap,
         essence: player.essence,
 
-        // armor
         equip: player.equip,
         armorInv: player.armorInv,
 
-        // perks + stats
         ownedPerks: player.ownedPerks,
         perkReloadMult: player.perkReloadMult,
         perkFireRateMult: player.perkFireRateMult,
@@ -435,7 +422,6 @@
         staminaMax: player.staminaMax,
         staminaRegen: player.staminaRegen,
 
-        // health
         hp: player.hp,
         maxHp: player.maxHp,
         medkits: player.medkits,
@@ -864,7 +850,6 @@
   }
 
   function craftArmorRoll(kind) {
-    // grindy costs, scale a bit with round
     const r = game.round;
     let costScrap = 0, costEss = 0;
     let chances = null;
@@ -872,7 +857,7 @@
     if (kind === "basic") {
       costScrap = 18 + Math.floor(r * 1.2);
       costEss = 2 + Math.floor(r * 0.25);
-      chances = [0.60, 0.25, 0.11, 0.035, 0.005]; // C/U/R/E/L
+      chances = [0.60, 0.25, 0.11, 0.035, 0.005];
     } else if (kind === "advanced") {
       costScrap = 35 + Math.floor(r * 1.8);
       costEss = 6 + Math.floor(r * 0.50);
@@ -891,7 +876,6 @@
     player.scrap -= costScrap;
     player.essence -= costEss;
 
-    // pick rarity
     const roll = Math.random();
     let acc = 0, ri = 0;
     for (let i = 0; i < chances.length; i++) {
@@ -899,7 +883,6 @@
       if (roll <= acc) { ri = i; break; }
     }
 
-    // pick slot
     const slot = ARMOR_SLOTS[(Math.random() * ARMOR_SLOTS.length) | 0];
     const piece = makeArmorPiece(slot, ri);
     addArmorToInventory(piece);
@@ -915,7 +898,6 @@
     const cur = player.equip[piece.slot];
 
     player.equip[piece.slot] = piece;
-    // remove from inv (optional grind feel: keep it simple, remove it)
     player.armorInv.splice(index, 1);
 
     if (!cur) setHint(`Equipped ${piece.name}`, true, 3, 1.2);
@@ -931,7 +913,6 @@
     if (it.rarityIndex >= 4) return setHint("Already Legendary.", true, 2, 1.0);
 
     const next = it.rarityIndex + 1;
-    // grindy upgrade curve
     const costScrap = 28 + next * 22 + Math.floor(game.round * 1.1);
     const costEss = 6 + next * 5 + Math.floor(game.round * 0.35);
 
@@ -1015,7 +996,6 @@
     if (player.armorInv.length === 0) {
       ui.armorList.appendChild(shopInfo("No armor crafted yet. Roll some armor above."));
     } else {
-      // show newest first
       const inv = [...player.armorInv].reverse();
       for (let i = 0; i < inv.length; i++) {
         const piece = inv[i];
@@ -1028,7 +1008,6 @@
           locked: false,
           onClick: () => equipArmorFromInv(realIndex),
         }));
-        // tiny color hint (optional)
         ui.armorList.lastChild.style.borderColor = col.replace(")", ",.35)").replace("rgba","rgba");
       }
     }
@@ -1134,7 +1113,6 @@
     drops.push({ kind:"cash", x, y, amount, t: 14, r: 0.22 });
   }
   function dropMats(x, y) {
-    // grind-friendly: mostly scrap, occasional essence
     if (Math.random() < 0.85) drops.push({ kind:"scrap", x, y, amount: 1 + (Math.random()<0.40 ? 1 : 0), t: 14, r: 0.22 });
     if (Math.random() < 0.22) drops.push({ kind:"ess", x, y, amount: 1, t: 14, r: 0.22 });
   }
@@ -1227,14 +1205,13 @@
   }
 
   function spawnBullet(ang, wpn) {
-    // tiny dark projectile, visible in world
     bullets.push({
       x: player.x + Math.cos(ang) * 0.45,
       y: player.y + Math.sin(ang) * 0.45,
       vx: Math.cos(ang) * wpn.bulletSpeed,
       vy: Math.sin(ang) * wpn.bulletSpeed,
-      life: wpn.range / wpn.bulletSpeed, // seconds
-      r: 0.06, // hit radius in world
+      life: wpn.range / wpn.bulletSpeed,
+      r: 0.06,
       dmg: wpn.dmg,
     });
   }
@@ -1261,7 +1238,6 @@
     game.muzzle = 0.06;
     game.recoil = 0.10;
 
-    // spread affects bullet angle
     const spread = (Math.random() - 0.5) * w.spread * player.perkSpreadMult;
     const ang = player.a + spread;
 
@@ -1335,22 +1311,18 @@
       }
     }
 
-    // shop
     ctx.fillStyle = "rgba(34,197,94,.95)";
     ctx.fillRect(x0 + shopKiosk.x * cell - 3, y0 + shopKiosk.y * cell - 3, 6, 6);
 
-    // armor station
     ctx.fillStyle = "rgba(80,160,255,.95)";
     ctx.fillRect(x0 + armorStation.x * cell - 3, y0 + armorStation.y * cell - 3, 6, 6);
 
-    // perks
     for (const m of perkMachines) {
       const perk = perkById(m.perkId);
       ctx.fillStyle = perk ? perk.color : "rgba(255,255,255,.7)";
       ctx.fillRect(x0 + m.x * cell - 2.5, y0 + m.y * cell - 2.5, 5, 5);
     }
 
-    // zombies
     ctx.fillStyle = "rgba(239,68,68,.85)";
     for (const z of zombies) {
       ctx.beginPath();
@@ -1358,7 +1330,6 @@
       ctx.fill();
     }
 
-    // player
     ctx.fillStyle = "rgba(96,165,250,.95)";
     ctx.beginPath();
     ctx.arc(x0 + player.x * cell, y0 + player.y * cell, 3.2, 0, Math.PI * 2);
@@ -1374,83 +1345,204 @@
     ctx.stroke();
   }
 
-  // ---------- Gun Model ----------
+  // ---------- Gun Model (NEW forward-facing) ----------
   function gunStyleFor(id) {
-    if (id === "pistol_rusty")    return { body:"rgba(60,70,85,.96)",  dark:"rgba(22,26,34,.98)", accent:"rgba(170,120,60,.85)",  bodyLen:118, barrelLen:22 };
-    if (id === "pistol_service")  return { body:"rgba(55,65,80,.96)",  dark:"rgba(18,20,26,.98)", accent:"rgba(80,160,255,.85)",  bodyLen:132, barrelLen:26 };
-    if (id === "pistol_marksman") return { body:"rgba(48,58,72,.96)",  dark:"rgba(15,18,24,.98)", accent:"rgba(210,210,220,.85)", bodyLen:145, barrelLen:30 };
-    if (id === "pistol_relic")    return { body:"rgba(40,48,60,.96)",  dark:"rgba(10,12,16,.98)", accent:"rgba(200,80,255,.85)",  bodyLen:156, barrelLen:34 };
-    return { body:"rgba(55,65,80,.96)", dark:"rgba(18,20,26,.98)", accent:"rgba(34,197,94,.85)", bodyLen:126, barrelLen:24 };
+    // Forward view tuning per weapon. Keep it subtle since pistols.
+    if (id === "pistol_rusty")    return { body:"rgba(70,78,92,.97)",  dark:"rgba(18,20,26,.98)", accent:"rgba(170,120,60,.80)", glass:"rgba(80,200,140,.20)", scale:1.00, optic:true };
+    if (id === "pistol_service")  return { body:"rgba(62,72,88,.97)",  dark:"rgba(14,16,20,.98)", accent:"rgba(80,160,255,.80)", glass:"rgba(80,160,255,.18)", scale:1.03, optic:true };
+    if (id === "pistol_marksman") return { body:"rgba(55,64,78,.97)",  dark:"rgba(12,14,18,.98)", accent:"rgba(220,220,230,.80)", glass:"rgba(160,255,200,.16)", scale:1.06, optic:true };
+    if (id === "pistol_relic")    return { body:"rgba(46,54,66,.97)",  dark:"rgba(10,12,16,.98)", accent:"rgba(200,80,255,.78)", glass:"rgba(200,80,255,.16)", scale:1.10, optic:true };
+    return { body:"rgba(62,72,88,.97)", dark:"rgba(14,16,20,.98)", accent:"rgba(34,197,94,.80)", glass:"rgba(80,200,140,.18)", scale:1.00, optic:true };
+  }
+
+  function rr(x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   function drawGunModel(dt) {
     const w = innerWidth, h = innerHeight;
 
-    game.recoil = Math.max(0, game.recoil - dt * 2.2);
-    game.muzzle = Math.max(0, game.muzzle - dt * 3.2);
+    game.recoil = Math.max(0, game.recoil - dt * 2.4);
+    game.muzzle = Math.max(0, game.muzzle - dt * 3.4);
 
     const moving = (keys.has("w") || keys.has("a") || keys.has("s") || keys.has("d")) ||
       (input.mobile && (Math.hypot(input.joy.dx, input.joy.dy) > 0.12));
-    const bob = moving ? Math.sin(performance.now() / 90) * 4 : 0;
 
-    const rx = game.recoil * 22;
-    const ry = game.recoil * 16;
+    const t = performance.now() / 1000;
+    const bob = moving ? Math.sin(t * 7.0) * 3.0 : 0;
+    const sway = moving ? Math.sin(t * 3.5) * 2.0 : 0;
 
-    const baseX = w * 0.56 + rx;
-    const baseY = h * 0.74 + bob + ry;
+    const rx = game.recoil * 10;
+    const ry = game.recoil * 18;
+
+    const baseX = w * 0.50 + sway * 0.35;
+    const baseY = h * 0.80 + bob + ry;
 
     const cw = currentWeapon();
     const sid = cw ? cw.id : "knife";
     const style = gunStyleFor(sid);
 
+    const S = style.scale;
+
     ctx.save();
-    ctx.globalAlpha = 0.98;
     ctx.translate(baseX, baseY);
-    ctx.rotate(-0.06);
 
-    // arm
-    ctx.fillStyle = "rgba(190,150,120,.92)";
-    ctx.fillRect(-42, 46, 120, 18);
+    // subtle roll on recoil
+    const roll = (-0.010 * (sway / 2)) + (game.recoil * 0.05);
+    ctx.rotate(roll);
 
-    // glove
-    ctx.fillStyle = "rgba(18,20,26,.96)";
-    ctx.fillRect(-14, 36, 44, 34);
+    ctx.globalAlpha = 0.985;
+
+    // Hands/arms (two gloves holding the gun)
+    const skin = "rgba(190,150,120,.92)";
+    const glove = "rgba(16,18,24,.97)";
+
+    // Left forearm
+    ctx.fillStyle = skin;
+    rr(-150, 40, 140, 26, 10); ctx.fill();
+    ctx.fillStyle = glove;
+    rr(-48, 22, 60, 52, 12); ctx.fill();
+
+    // Right forearm
+    ctx.fillStyle = skin;
+    rr(10, 52, 150, 26, 10); ctx.fill();
+    ctx.fillStyle = glove;
+    rr(6, 34, 70, 58, 12); ctx.fill();
 
     if (player.usingKnife) {
-      ctx.fillStyle = "rgba(220,220,230,.95)";
-      ctx.fillRect(40, 22, 150, 10);
-      ctx.fillStyle = "rgba(20,20,20,.9)";
-      ctx.fillRect(0, 30, 60, 26);
-    } else {
-      ctx.fillStyle = style.body;
-      ctx.fillRect(0, 18, style.bodyLen, 34);
+      // forward knife
+      ctx.fillStyle = "rgba(20,20,20,.92)";
+      rr(-22, 10, 44, 70, 10); ctx.fill();
+      ctx.fillStyle = "rgba(220,220,230,.96)";
+      rr(-8, -120, 16, 140, 6); ctx.fill();
 
-      ctx.fillStyle = style.dark;
-      ctx.fillRect(10, 22, style.bodyLen - 30, 10);
-
-      ctx.fillStyle = style.dark;
-      ctx.fillRect(22, 46, 40, 56);
-
-      ctx.fillStyle = style.dark;
-      ctx.fillRect(style.bodyLen - 10, 24, style.barrelLen, 10);
-
-      ctx.fillStyle = style.accent;
-      ctx.fillRect(8, 40, Math.max(18, style.bodyLen * 0.45), 4);
-
-      if (game.muzzle > 0) {
-        const a = 0.75 * (game.muzzle / 0.06);
-        ctx.fillStyle = `rgba(255,210,80,${a})`;
-        ctx.beginPath();
-        ctx.arc(style.bodyLen + style.barrelLen + 8, 28, 14, 0, Math.PI * 2);
+      if (player.knife.swing > 0) {
+        const a = clamp(player.knife.swing / 0.14, 0, 1);
+        ctx.fillStyle = `rgba(220,220,230,${0.20 * a})`;
+        rr(-w * 0.18, -h * 0.25, w * 0.36, h * 0.40, 30);
         ctx.fill();
       }
+
+      ctx.restore();
+      return;
     }
 
-    if (player.usingKnife && player.knife.swing > 0) {
-      const t = player.knife.swing / 0.14;
-      ctx.fillStyle = `rgba(220,220,230,${0.28 * t})`;
-      ctx.fillRect(-w * 0.05, -h * 0.05, w * 0.40, h * 0.40);
+    // Gun: forward-facing sight picture
+    // Layout is symmetrical around X=0, barrel points upward (toward crosshair).
+    const gunW = 210 * S;
+    const gunH = 230 * S;
+
+    const bodyY = -10 * S;
+    const bodyH = 110 * S;
+
+    // Main receiver block
+    ctx.fillStyle = style.body;
+    rr(-gunW * 0.30, bodyY, gunW * 0.60, bodyH, 14 * S);
+    ctx.fill();
+
+    // Dark top rail
+    ctx.fillStyle = style.dark;
+    rr(-gunW * 0.26, bodyY + 10 * S, gunW * 0.52, 22 * S, 10 * S);
+    ctx.fill();
+
+    // Slide details
+    ctx.fillStyle = "rgba(255,255,255,.05)";
+    rr(-gunW * 0.24, bodyY + 40 * S, gunW * 0.48, 10 * S, 6 * S);
+    ctx.fill();
+
+    // Grip (downwards)
+    ctx.fillStyle = style.dark;
+    rr(-gunW * 0.12, bodyY + bodyH - 4 * S, gunW * 0.24, 120 * S, 14 * S);
+    ctx.fill();
+
+    // Trigger guard
+    ctx.strokeStyle = "rgba(0,0,0,.55)";
+    ctx.lineWidth = 6 * S;
+    ctx.beginPath();
+    ctx.ellipse(0, bodyY + bodyH + 30 * S, 34 * S, 22 * S, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Barrel housing (toward crosshair)
+    ctx.fillStyle = style.dark;
+    rr(-gunW * 0.10, bodyY - 150 * S, gunW * 0.20, 150 * S, 10 * S);
+    ctx.fill();
+
+    // Muzzle ring
+    ctx.strokeStyle = "rgba(0,0,0,.65)";
+    ctx.lineWidth = 6 * S;
+    ctx.beginPath();
+    ctx.arc(0, bodyY - 154 * S, 18 * S, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Front sight post
+    ctx.fillStyle = "rgba(0,0,0,.70)";
+    rr(-8 * S, bodyY - 188 * S, 16 * S, 26 * S, 5 * S);
+    ctx.fill();
+
+    // Optic (EOTech-ish box)
+    if (style.optic) {
+      // optic base
+      ctx.fillStyle = style.dark;
+      rr(-58 * S, bodyY - 34 * S, 116 * S, 44 * S, 10 * S);
+      ctx.fill();
+
+      // optic body
+      ctx.fillStyle = "rgba(26,30,40,.96)";
+      rr(-64 * S, bodyY - 96 * S, 128 * S, 70 * S, 12 * S);
+      ctx.fill();
+
+      // glass window
+      ctx.fillStyle = style.glass;
+      rr(-42 * S, bodyY - 82 * S, 84 * S, 42 * S, 10 * S);
+      ctx.fill();
+
+      // glass edge shine
+      ctx.strokeStyle = "rgba(255,255,255,.12)";
+      ctx.lineWidth = 3 * S;
+      rr(-42 * S, bodyY - 82 * S, 84 * S, 42 * S, 10 * S);
+      ctx.stroke();
+
+      // tiny reticle dot (very subtle)
+      ctx.fillStyle = "rgba(255,80,80,.35)";
+      ctx.beginPath();
+      ctx.arc(0, bodyY - 61 * S, 4.2 * S, 0, Math.PI * 2);
+      ctx.fill();
     }
+
+    // Accent stripe
+    ctx.fillStyle = style.accent;
+    rr(-gunW * 0.22, bodyY + 68 * S, gunW * 0.44, 7 * S, 4 * S);
+    ctx.fill();
+
+    // Muzzle flash (forward, centered)
+    if (game.muzzle > 0) {
+      const a = 0.75 * (game.muzzle / 0.06);
+      ctx.fillStyle = `rgba(255,210,80,${a})`;
+      ctx.beginPath();
+      ctx.arc(0, bodyY - 198 * S, 26 * S, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.45})`;
+      ctx.beginPath();
+      ctx.arc(0, bodyY - 198 * S, 12 * S, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Depth shading to feel less flat
+    ctx.fillStyle = "rgba(0,0,0,.12)";
+    rr(-gunW * 0.30, bodyY + 8 * S, gunW * 0.60, bodyH, 14 * S);
+    ctx.fill();
 
     ctx.restore();
   }
@@ -1489,13 +1581,11 @@
     const w = innerWidth, h = innerHeight;
     const horizon = (h / 2) + (player.pitch * (h * 0.35));
 
-    // sky + floor
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, 0, w, horizon);
     ctx.fillStyle = "#070a0f";
     ctx.fillRect(0, horizon, w, h - horizon);
 
-    // walls
     const rays = Math.floor(w / 2);
     for (let i = 0; i < rays; i++) {
       const pct = i / (rays - 1);
@@ -1523,26 +1613,18 @@
       }
     }
 
-    // sprite list
     const sprites = [];
 
-    // bullets (visible tiny dark balls)
     for (const b of bullets) sprites.push({ kind:"bullet", ref:b, x:b.x, y:b.y, d: dist(player.x, player.y, b.x, b.y) });
-
-    // zombies
     for (const z of zombies) sprites.push({ kind:"z", ref:z, x:z.x, y:z.y, d: dist(player.x, player.y, z.x, z.y) });
-
-    // drops
     for (const d of drops) sprites.push({ kind:"drop", ref:d, x:d.x, y:d.y, d: dist(player.x, player.y, d.x, d.y) });
 
-    // shop + armor + perks
     sprites.push({ kind:"shop", x:shopKiosk.x, y:shopKiosk.y, d: dist(player.x, player.y, shopKiosk.x, shopKiosk.y) });
     sprites.push({ kind:"armor", x:armorStation.x, y:armorStation.y, d: dist(player.x, player.y, armorStation.x, armorStation.y) });
     for (const pm of perkMachines) sprites.push({ kind:"perk", ref:pm, x:pm.x, y:pm.y, d: dist(player.x, player.y, pm.x, pm.y) });
 
     sprites.sort((a,b) => b.d - a.d);
 
-    // draw sprites (simple billboards)
     for (const s of sprites) {
       const dx = s.x - player.x;
       const dy = s.y - player.y;
@@ -1598,7 +1680,6 @@
         continue;
       }
       if (s.kind === "bullet") {
-        // tiny black ball (a dot) slightly above horizon to look "in-world"
         const bsz = Math.max(2, size * 0.08);
         ctx.fillStyle = "rgba(0,0,0,.70)";
         ctx.beginPath();
@@ -1609,7 +1690,6 @@
       if (s.kind === "z") {
         const z = s.ref;
 
-        // Better animated zombie (no images)
         const runner = z.type === "runner";
         const chaser = z.role === "chaser";
 
@@ -1645,27 +1725,22 @@
         const armH = size * 0.34;
         const armY = top + size*0.41 + bob;
 
-        // shadow
         ctx.fillStyle = "rgba(0,0,0,.22)";
         ctx.beginPath();
         ctx.ellipse(screenX, horizon + size*0.34, size*0.18, size*0.07, 0, 0, Math.PI*2);
         ctx.fill();
 
-        // legs
         ctx.fillStyle = dc;
         ctx.fillRect(left + size*0.36 + legSwing, legY, legW, legH);
         ctx.fillRect(left + size*0.54 - legSwing, legY, legW, legH);
 
-        // torso
         ctx.fillStyle = bc;
         ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
 
-        // arms
         ctx.fillStyle = dc;
         ctx.fillRect(left + size*0.18 + armSwing, armY, armW, armH);
         ctx.fillRect(left + size*0.70 - armSwing, armY, armW, armH);
 
-        // head
         const headX = screenX + lean*0.10;
         const headY = top + size*0.24 + bob + walk2 * (size*0.02);
         ctx.fillStyle = bc;
@@ -1673,7 +1748,6 @@
         ctx.arc(headX, headY, headR, 0, Math.PI*2);
         ctx.fill();
 
-        // face shadow + eyes
         ctx.fillStyle = "rgba(0,0,0,.20)";
         ctx.beginPath();
         ctx.arc(headX + headR*0.18, headY + headR*0.15, headR*0.85, 0, Math.PI*2);
@@ -1690,7 +1764,6 @@
           ctx.fill();
         }
 
-        // health bar
         const pct = clamp(z.hp / z.maxHp, 0, 1);
         ctx.fillStyle = "rgba(0,0,0,.35)";
         ctx.fillRect(left, top - 10, size, 6);
@@ -1699,7 +1772,6 @@
       }
     }
 
-    // crosshair
     ctx.strokeStyle = "rgba(255,255,255,.55)";
     ctx.lineWidth = 2;
     const cx = w / 2, cy = h / 2;
@@ -1713,7 +1785,6 @@
     drawMinimap();
     drawGunModel(dt);
 
-    // gentle prompts
     const near = nearAnyMachine();
     if (near && game.mode === "play") {
       if (near.type === "shop") setHint("At SHOP: Q (or USE on mobile).", true, 0, 0.25);
@@ -1749,7 +1820,6 @@
     player.hp = player.maxHp;
     player.stamina = player.staminaMax;
 
-    // restart current round
     startRound(game.round, true);
 
     setHint("Restarted. Progress kept.", true, 4, 1.6);
@@ -1759,15 +1829,14 @@
   // ---------- Round System ----------
   function startRound(r, restart=false) {
     game.round = r;
-    game.toSpawn = 8 + r * 3;        // round size grows
-    game.spawnBudget = game.toSpawn; // how many still need spawning
+    game.toSpawn = 8 + r * 3;
+    game.spawnBudget = game.toSpawn;
     game.alive = 0;
     game.betweenT = restart ? 0.6 : 2.2;
 
     setHint(restart ? `Round ${r} restarted.` : `Round ${r} starting...`, true, 4, 1.4);
   }
 
-  // start round 1 (or saved round)
   startRound(game.round || 1, true);
 
   // ---------- Loop ----------
@@ -1779,7 +1848,6 @@
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
 
-    // UI
     ui.hp.textContent = Math.max(0, Math.floor(player.hp));
     ui.hpMax.textContent = Math.floor(player.maxHp);
     ui.armor.textContent = String(getTotalArmor());
@@ -1807,7 +1875,6 @@
       ui.mag.textContent = w ? w.magSize : "-";
     }
 
-    // mobile USE button visibility
     if (input.mobile) {
       const near = nearAnyMachine();
       if (near && game.mode === "play") ui.btnUse.classList.remove("hidden");
@@ -1816,17 +1883,14 @@
 
     render(dt);
 
-    // autosave
     saveTimer += dt;
     if (saveTimer >= 10) { saveTimer = 0; saveGame(); }
 
-    // cooldowns
     if (player.knife.t > 0) player.knife.t = Math.max(0, player.knife.t - dt);
     if (player.knife.swing > 0) player.knife.swing = Math.max(0, player.knife.swing - dt);
 
     if (game.mode !== "play") return;
 
-    // reload
     const wpn = currentWeapon();
     if (!player.usingKnife && wpn && player.ammo.reloading) {
       player.ammo.rt += dt;
@@ -1843,11 +1907,9 @@
       }
     }
 
-    // yaw look (sensitivity applies here)
     player.a += lookDelta * 0.0022 * settings.sens;
     lookDelta = 0;
 
-    // movement
     let mxv = 0, myv = 0;
 
     if (!input.mobile) {
@@ -1869,7 +1931,6 @@
 
     const moving = (Math.abs(mxv) + Math.abs(myv)) > 0.01;
 
-    // sprint logic
     const wantsSprintPC = (!input.mobile && keys.has("shift"));
     const wantsSprintMobile = (input.mobile && settings.autoSprint && (Math.hypot(input.joy.dx, input.joy.dy) > 0.85));
     const wantsSprint = wantsSprintPC || wantsSprintMobile;
@@ -1887,14 +1948,12 @@
     if (!isWall(nx, player.y)) player.x = nx;
     if (!isWall(player.x, ny)) player.y = ny;
 
-    // fire
     if (!input.mobile) {
       if (mouseDown) shoot();
     } else {
       if (input.firing) shoot();
     }
 
-    // round pacing (between-round break)
     if (game.betweenT > 0) {
       game.betweenT -= dt;
       if (game.betweenT <= 0) {
@@ -1902,10 +1961,8 @@
       }
     }
 
-    // spawn zombies only after break ends
     if (game.betweenT <= 0) {
       if (game.spawnBudget > 0) {
-        // spawn rate ramps slightly with round
         const spawnChance = 0.10 + game.round * 0.004;
         if (Math.random() < spawnChance) {
           const ok = spawnZombie();
@@ -1914,16 +1971,13 @@
       }
     }
 
-    // if round complete: no alive + none left to spawn
     if (game.spawnBudget <= 0 && game.alive <= 0 && game.betweenT <= 0) {
       startRound(game.round + 1, false);
       saveGame();
     }
 
-    // keep only 4 chasers
     assignChasers();
 
-    // flow field update
     game.flowTimer -= dt;
     if (game.flowTimer <= 0) {
       game.flowTimer = 0.25;
@@ -1931,7 +1985,6 @@
     }
     const flow = game.flow;
 
-    // bullets update + collision (THIS fixes your "must be close" issue)
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
       b.life -= dt;
@@ -1940,12 +1993,10 @@
       const nx = b.x + b.vx * dt;
       const ny = b.y + b.vy * dt;
 
-      // wall hit
       if (isWall(nx, ny)) { bullets.splice(i, 1); continue; }
 
       b.x = nx; b.y = ny;
 
-      // zombie hit
       let hit = null;
       for (const z of zombies) {
         if (dist(b.x, b.y, z.x, z.y) < (z.r + b.r)) { hit = z; break; }
@@ -1961,7 +2012,6 @@
       }
     }
 
-    // zombie AI
     for (let i = zombies.length - 1; i >= 0; i--) {
       const z = zombies[i];
       z.hitCd = Math.max(0, z.hitCd - dt);
@@ -2011,7 +2061,6 @@
         }
       }
 
-      // attack if close
       const d = dist(player.x, player.y, z.x, z.y);
       if (d < 0.55 && z.hitCd <= 0) {
         z.hitCd = 0.6;
@@ -2029,7 +2078,6 @@
       }
     }
 
-    // pickups
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i];
       d.t -= dt;
@@ -2052,7 +2100,6 @@
       if (d.t <= 0) drops.splice(i, 1);
     }
 
-    // slow regen
     const secondsNow = performance.now() / 1000;
     if (player.hp > 0 && player.hp < player.maxHp) {
       if (secondsNow - player.lastHurtTime >= player.regenDelay) {
