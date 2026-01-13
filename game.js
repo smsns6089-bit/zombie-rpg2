@@ -1386,7 +1386,8 @@
     const rx = game.recoil * 10;
     const ry = game.recoil * 18;
 
-    const baseX = w * 0.50 + sway * 0.35;
+  const baseX = w * 0.60 + sway * 0.35; // move gun right
+  
     const baseY = h * 0.80 + bob + ry;
 
     const cw = currentWeapon();
