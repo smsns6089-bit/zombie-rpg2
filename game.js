@@ -2207,11 +2207,10 @@
       }
     }
 
-   // zombies update + MOANS  (DROP-IN REWRITE)
+// zombies update + MOANS (FIXED + CLOSED BRACES)
 for (let i = zombies.length - 1; i >= 0; i--) {
   const z = zombies[i];
 
-  // cooldown between zombie hits on you
   z.hitCd = Math.max(0, z.hitCd - dt);
 
   const isRunner = (z.type === "runner");
@@ -2242,7 +2241,6 @@ for (let i = zombies.length - 1; i >= 0; i--) {
     const ny = z.y + Math.sin(ang) * spBase * dt;
     if (!isWall(nx, z.y)) z.x = nx;
     if (!isWall(z.x, ny)) z.y = ny;
-
   } else {
     z.thinkT -= dt;
     if (z.thinkT <= 0) {
@@ -2263,71 +2261,58 @@ for (let i = zombies.length - 1; i >= 0; i--) {
     }
   }
 
-  // ---------- moan scheduling + stereo pan ----------
-z.moanT -= dt;
-if (z.moanT <= 0) {
-  const d = dist(player.x, player.y, z.x, z.y);
+  // ---------- moan scheduling ----------
+  z.moanT -= dt;
+  if (z.moanT <= 0) {
+    const d = dist(player.x, player.y, z.x, z.y);
 
-  // only moan if near-ish
-  if (d < 14.5) {
-    // if audio isn’t ready yet, try again soon (don’t wait 5 seconds)
-    if (!audio.unlocked || !audio.zombieBuf) {
-      z.moanT = rand(0.25, 0.75);
-    } else {
+    if (d < 14.5 && audio.unlocked) {
       // angle from player -> zombie, compared to your view angle
       const angTo = Math.atan2(z.y - player.y, z.x - player.x);
       let da = angTo - player.a;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
 
-      // map angle to stereo pan (-1 left, +1 right)
-      const pan = clamp(da / (player.fov * 0.75), -1, 1);
-
-      // chance increases as zombie gets closer
+      // (we’re not using pan yet in your current procedural audio, but this keeps the math ready)
       const pClose = clamp(1 - d / 14.5, 0, 1);
       const chance = 0.28 + pClose * 0.62;
 
-      // global anti-spam (keeps it audible, not a machine gun of moans)
       const nowS = performance.now() / 1000;
       const okGlobal = (nowS - (audio.lastMoanT || 0)) > 0.20;
 
       if (okGlobal && Math.random() < chance) {
         audio.lastMoanT = nowS;
-        playZombieMoan(d, isRunner, isChaser, pan);
+        // your current playZombieMoan takes 3 args in this file:
+        playZombieMoan(d, isRunner, isChaser);
       }
-
-      // next moan time
-      z.moanT =
-        rand(2.2, 5.8) *
-        (isRunner ? 0.85 : 1.0) *
-        (isChaser ? 0.85 : 1.0);
     }
-  } else {
-    // far away: moan less often
-    z.moanT = rand(4.0, 7.0);
+
+    z.moanT =
+      rand(2.2, 5.8) *
+      (isRunner ? 0.85 : 1.0) *
+      (isChaser ? 0.85 : 1.0);
   }
-}
 
-// ---------- attack player ----------
-const dToPlayer = dist(player.x, player.y, z.x, z.y);
-if (dToPlayer < 0.55 && z.hitCd <= 0) {
-  z.hitCd = 0.6;
+  // ---------- attack player ----------
+  const dToPlayer = dist(player.x, player.y, z.x, z.y);
+  if (dToPlayer < 0.55 && z.hitCd <= 0) {
+    z.hitCd = 0.6;
 
-  const armor = getTotalArmor();
-  const reduction = clamp(armor * 0.02, 0, 0.60);
-  const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
+    const armor = getTotalArmor();
+    const reduction = clamp(armor * 0.02, 0, 0.60);
+    const finalDmg = Math.max(1, Math.round(z.dmg * (1 - reduction)));
 
-  player.hp -= finalDmg;
-  player.lastHurtTime = performance.now() / 1000;
+    player.hp -= finalDmg;
+    player.lastHurtTime = performance.now() / 1000;
 
-  setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
-  if (player.hp <= 0) die();
-  saveGame();
-}
+    setHint(`You're getting chewed! (-${finalDmg})`, false, 4, 0.8);
+    if (player.hp <= 0) die();
+    saveGame();
+  }
+} // ✅ CLOSES the zombies for-loop
 
+// ---------- Start ----------
+setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
+requestAnimationFrame(tick);
 
-  // ---------- Start ----------
-  setHint("Survive rounds. Shop = Q (green). Armor = E (blue). Perks = E. Sprint = Shift. Medkit = H.", true, 3, 2.2);
-  requestAnimationFrame(tick);
-
-})();
+})(); // ✅ CLOSES the IIFE
