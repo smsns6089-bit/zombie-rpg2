@@ -2267,7 +2267,17 @@
           // probability based on proximity
           const p = clamp(1 - d / 14.5, 0, 1);
           if (Math.random() < (0.35 + p * 0.55)) {
-            playZombieMoan(d, isRunner, isChaser);
+           // pan based on where the zombie is relative to your view
+const angTo = Math.atan2(z.y - player.y, z.x - player.x);
+let da = angTo - player.a;
+while (da > Math.PI) da -= Math.PI * 2;
+while (da < -Math.PI) da += Math.PI * 2;
+
+// map angle to stereo pan (-1 left, +1 right)
+const pan = clamp(da / (player.fov * 0.75), -1, 1);
+
+playZombieGroan(d, pan);
+
           }
         }
         // next moan time
