@@ -1946,18 +1946,21 @@
     const y = baseY + my + swayY;
 
     ctx.save();
-    ctx.translate(x, y);
+ctx.translate(x, y);
 
-    // gun tilt with recoil
-  ctx.rotate((-1.15) + game.recoil * 0.05);
+// sizes ✅ move this ABOVE rotate
+const s = Math.min(W, H);
+const scale = clamp(s / 900, 0.85, 1.25);
+
+// gun tilt with recoil
+ctx.rotate((-1.15) + game.recoil * 0.05);
+
+// pivot correction
 ctx.translate(-120 * scale, -120 * scale);
 
-    // choose a “shape” based on weapon type
-    const type = w ? w.type : "pistol";
+// choose a “shape” based on weapon type
+const type = w ? w.type : "pistol";
 
-    // sizes
-    const s = Math.min(W, H);
-    const scale = clamp(s / 900, 0.85, 1.25);
 
     // colors
     const body = "rgba(22,24,30,.92)";
