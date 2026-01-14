@@ -1960,7 +1960,8 @@ function drawWeaponViewmodel(w, dt) {
   const aimAng = Math.atan2(aimY - y, aimX - x);
 
   // Gun art is drawn extending +X, so rotate to point at crosshair
- ctx.rotate(aimAng - Math.PI + game.recoil * 0.04);
+ctx.rotate(aimAng - Math.PI + game.recoil * 0.04);
+ctx.scale(1, -1); // flips weapon upright (fixes upside down gun)
 
   // Pivot so it sits on-screen and doesn't "orbit"
   // (ONLY ONE pivot translate. Too many = gun disappears)
