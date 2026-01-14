@@ -1934,8 +1934,8 @@ function drawWeaponViewmodel(w, dt) {
   const scale = baseScale * 1.85;
 
   // -------- Viewmodel placement --------
-  const baseX = W * 0.72;
-  const baseY = H * 0.94;
+  const baseX = W * 0.58;
+  const baseY = H * 0.88;
 
   // -------- Recoil behavior --------
   const kick = game.recoil * 60;
@@ -1966,8 +1966,8 @@ function drawWeaponViewmodel(w, dt) {
 
   // ✅ One clean pivot so it doesn't orbit
   // Think of this as your “hand grip point”
-  const pivotX = -210 * baseScale;
-  const pivotY = -165 * baseScale;
+  const pivotX = -120 * baseScale;
+  const pivotY = -105 * baseScale;
   ctx.translate(pivotX - back, pivotY);
 
   // weapon type
