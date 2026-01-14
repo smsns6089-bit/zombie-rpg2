@@ -1938,8 +1938,8 @@ function drawWeaponViewmodel(w, dt) {
 
   // -------- Viewmodel placement --------
   // (0.62–0.70 is a good range)
-  const baseX = W * 0.66;
-  const baseY = H * 0.92;
+  const baseX = W * 0.72;
+  const baseY = H * 0.94;
 
   // -------- Recoil behavior --------
   const kick = game.recoil * 60;
@@ -1959,8 +1959,18 @@ function drawWeaponViewmodel(w, dt) {
 
   // -------- Forward facing angle --------
   // More negative = points more toward center (try -0.95 to -1.25)
-  const forwardAngle = -1.05;
-  ctx.rotate(forwardAngle + game.recoil * 0.04);
+// Aim the viewmodel toward the crosshair automatically (no guessing angles)
+const aimX = W * 0.5;
+const aimY = H * 0.5;
+
+// angle from gun position to crosshair
+const aimAng = Math.atan2(aimY - y, aimX - x);
+
+// rotate so the gun (drawn in +X direction) points at crosshair
+ctx.rotate(aimAng + game.recoil * 0.04);
+
+// Pivot + lift into view (keeps it on-screen)
+ctx.translate(-80 * baseScale, -220 * baseScale);
 
   // ✅ PIVOT FIX:
   // Use baseScale here (NOT the big "scale"), otherwise it flies off screen.
