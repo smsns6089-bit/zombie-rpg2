@@ -1977,142 +1977,192 @@
     }
 
     // draw different silhouettes
+     // --- mini helpers for nicer shading ---
+    function fillPart(x,y,w,h, r, baseA=0.92){
+      // soft vertical gradient for “3D-ish” feel
+      const g = ctx.createLinearGradient(0, y, 0, y+h);
+      g.addColorStop(0, `rgba(35,38,48,${baseA})`);
+      g.addColorStop(0.55, `rgba(20,22,28,${baseA})`);
+      g.addColorStop(1, `rgba(10,12,16,${baseA})`);
+      ctx.fillStyle = g;
+      rr(x,y,w,h,r); ctx.fill();
+
+      // top highlight
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      rr(x+2, y+2, w-4, Math.max(3, h*0.20), Math.max(2, r*0.7));
+      ctx.fill();
+
+      // bottom shadow lip
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      rr(x+2, y+h - Math.max(4, h*0.18), w-4, Math.max(4, h*0.18), Math.max(2, r*0.7));
+      ctx.fill();
+    }
+
+    function fillMetal(x,y,w,h, r){
+      const g = ctx.createLinearGradient(x, y, x+w, y);
+      g.addColorStop(0, "rgba(170,180,205,.65)");
+      g.addColorStop(0.35, "rgba(90,105,130,.55)");
+      g.addColorStop(0.7, "rgba(210,220,245,.55)");
+      g.addColorStop(1, "rgba(70,85,110,.55)");
+      ctx.fillStyle = g;
+      rr(x,y,w,h,r); ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,.10)";
+      ctx.fillRect(x+2, y+2, w-4, Math.max(2, h*0.25));
+    }
+
+    function boltScrews(x,y,w,h){
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.arc(x + (i+1)*(w/5), y + h*0.55, Math.max(1.2, h*0.12), 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    // draw different silhouettes (UPGRADED)
     if (player.usingKnife) {
-      // Knife swipe
       const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
       const ang = 0.9 - swing * 1.8;
-
       ctx.rotate(ang);
       ctx.translate(40 * scale, 40 * scale);
 
       // handle
-      ctx.fillStyle = grip;
-      rr(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
-      ctx.fill();
-
+      fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
       // blade
-      ctx.fillStyle = metal;
-      ctx.beginPath();
-      ctx.moveTo(10*scale, 52*scale);
-      ctx.lineTo(150*scale, 20*scale);
-      ctx.lineTo(165*scale, 35*scale);
-      ctx.lineTo(30*scale, 60*scale);
-      ctx.closePath();
+      fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
+
+    } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
+      // Modern AR/DMR silhouette
+      // receiver
+      fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
+      boltScrews(-20*scale, 56*scale, 290*scale, 62*scale);
+
+      // upper rail
+      fillMetal(40*scale, 44*scale, 170*scale, 12*scale, 6*scale);
+
+      // barrel
+      fillMetal(220*scale, 52*scale, 185*scale, 16*scale, 8*scale);
+
+      // handguard
+      ctx.fillStyle = "rgba(0,0,0,.26)";
+      rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<5;i++){
+        ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
+      }
+
+      // magazine (angled)
+      ctx.save();
+      ctx.translate(105*scale, 110*scale);
+      ctx.rotate(0.18);
+      fillPart(-10*scale, -10*scale, 60*scale, 88*scale, 12*scale);
+      ctx.restore();
+
+      // grip
+      ctx.save();
+      ctx.translate(65*scale, 115*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 48*scale, 70*scale, 14*scale);
+      ctx.restore();
+
+      // stock
+      fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
+      ctx.fillStyle = "rgba(0,0,0,.22)";
+      rr(-78*scale, 76*scale, 30*scale, 28*scale, 12*scale);
       ctx.fill();
 
-      // shine
-      ctx.fillStyle = "rgba(255,255,255,.10)";
-      ctx.fillRect(35*scale, 50*scale, 85*scale, 4*scale);
-
-    } else if (type === "shotgun") {
-      // Shotgun: big barrel + pump
-      ctx.fillStyle = body;
-      rr(-20*scale, 40*scale, 260*scale, 70*scale, 18*scale);
-      ctx.fill();
-
-      ctx.fillStyle = metal;
-      rr(160*scale, 22*scale, 180*scale, 26*scale, 12*scale); // barrel
-      ctx.fill();
-
-      ctx.fillStyle = grip;
-      rr(20*scale, 95*scale, 65*scale, 55*scale, 14*scale); // grip
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(0,0,0,.25)";
-      rr(70*scale, 75*scale, 80*scale, 35*scale, 12*scale); // pump
-      ctx.fill();
-
-    } else if (type === "sniper" || type === "marksman") {
-      // Sniper: long barrel + scope
-      ctx.fillStyle = body;
-      rr(-30*scale, 45*scale, 320*scale, 60*scale, 18*scale);
-      ctx.fill();
-
-      ctx.fillStyle = metal;
-      rr(240*scale, 30*scale, 220*scale, 20*scale, 10*scale); // barrel
-      ctx.fill();
-
-      // scope
-      ctx.fillStyle = "rgba(0,0,0,.35)";
-      rr(85*scale, 20*scale, 110*scale, 26*scale, 12*scale);
-      ctx.fill();
-      ctx.fillStyle = edge;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = grip;
-      rr(35*scale, 95*scale, 65*scale, 55*scale, 14*scale);
-      ctx.fill();
-
-    } else if (type === "lmg") {
-      // LMG: chunky body + box mag
-      ctx.fillStyle = body;
-      rr(-35*scale, 38*scale, 300*scale, 80*scale, 18*scale);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(0,0,0,.30)";
-      rr(90*scale, 110*scale, 80*scale, 65*scale, 12*scale); // box mag
-      ctx.fill();
-
-      ctx.fillStyle = metal;
-      rr(200*scale, 28*scale, 170*scale, 22*scale, 10*scale);
-      ctx.fill();
-
-      ctx.fillStyle = grip;
-      rr(25*scale, 95*scale, 65*scale, 55*scale, 14*scale);
-      ctx.fill();
+      // optional scope for sniper/marksman
+      if (type === "sniper" || type === "marksman") {
+        fillPart(90*scale, 22*scale, 120*scale, 26*scale, 12*scale);
+        fillMetal(80*scale, 30*scale, 20*scale, 10*scale, 6*scale);
+        fillMetal(210*scale, 30*scale, 20*scale, 10*scale, 6*scale);
+      }
 
     } else if (type === "smg") {
-      // SMG: shorter body + stick mag
-      ctx.fillStyle = body;
-      rr(-25*scale, 52*scale, 230*scale, 58*scale, 16*scale);
-      ctx.fill();
+      // SMG: compact receiver + short barrel
+      fillPart(-10*scale, 68*scale, 240*scale, 54*scale, 16*scale);
+      fillMetal(170*scale, 66*scale, 110*scale, 14*scale, 8*scale);
 
-      ctx.fillStyle = "rgba(0,0,0,.30)";
-      rr(70*scale, 100*scale, 45*scale, 75*scale, 10*scale); // stick mag
-      ctx.fill();
+      // stick mag
+      ctx.save();
+      ctx.translate(85*scale, 118*scale);
+      ctx.rotate(0.08);
+      fillPart(-10*scale, -10*scale, 44*scale, 90*scale, 10*scale);
+      ctx.restore();
 
-      ctx.fillStyle = metal;
-      rr(160*scale, 45*scale, 130*scale, 18*scale, 10*scale);
-      ctx.fill();
+      // grip
+      ctx.save();
+      ctx.translate(40*scale, 118*scale);
+      ctx.rotate(0.40);
+      fillPart(-10*scale, -10*scale, 44*scale, 64*scale, 12*scale);
+      ctx.restore();
 
-      ctx.fillStyle = grip;
-      rr(22*scale, 95*scale, 55*scale, 50*scale, 14*scale);
-      ctx.fill();
+      // mini stock
+      fillPart(-55*scale, 76*scale, 60*scale, 36*scale, 12*scale);
 
-    } else if (type === "ar" || type === "special") {
-      // AR/Special: medium body + mag
-      ctx.fillStyle = body;
-      rr(-30*scale, 46*scale, 280*scale, 66*scale, 18*scale);
-      ctx.fill();
+    } else if (type === "shotgun") {
+      // Shotgun: fat tube + pump
+      fillPart(-20*scale, 62*scale, 270*scale, 66*scale, 18*scale);
+      fillMetal(200*scale, 52*scale, 220*scale, 18*scale, 10*scale); // barrel
 
-      ctx.fillStyle = "rgba(0,0,0,.30)";
-      rr(95*scale, 102*scale, 55*scale, 78*scale, 12*scale); // mag
+      // pump
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      rr(70*scale, 82*scale, 90*scale, 34*scale, 12*scale);
       ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<4;i++) ctx.fillRect((78+i*18)*scale, 92*scale, 12*scale, 3*scale);
 
-      ctx.fillStyle = metal;
-      rr(210*scale, 38*scale, 160*scale, 20*scale, 10*scale);
-      ctx.fill();
+      // grip
+      ctx.save();
+      ctx.translate(40*scale, 122*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 50*scale, 70*scale, 14*scale);
+      ctx.restore();
 
-      ctx.fillStyle = grip;
-      rr(30*scale, 95*scale, 60*scale, 55*scale, 14*scale);
-      ctx.fill();
+      // stock
+      fillPart(-70*scale, 72*scale, 75*scale, 44*scale, 14*scale);
+
+    } else if (type === "lmg") {
+      // LMG: chunky + box mag
+      fillPart(-30*scale, 60*scale, 310*scale, 76*scale, 18*scale);
+      fillMetal(220*scale, 54*scale, 200*scale, 18*scale, 10*scale);
+
+      // box mag
+      fillPart(110*scale, 125*scale, 86*scale, 70*scale, 12*scale);
+      ctx.fillStyle = "rgba(255,255,255,.05)";
+      ctx.fillRect(118*scale, 134*scale, 70*scale, 6*scale);
+
+      // grip
+      ctx.save();
+      ctx.translate(55*scale, 128*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 52*scale, 76*scale, 14*scale);
+      ctx.restore();
 
     } else {
-      // Pistol default
-      ctx.fillStyle = body;
-      rr(-10*scale, 70*scale, 170*scale, 50*scale, 18*scale);
-      ctx.fill();
+      // pistol (cleaner, more “real” proportions)
+      fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);  // slide/body
+      fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale); // barrel
 
-      ctx.fillStyle = grip;
-      rr(25*scale, 95*scale, 55*scale, 60*scale, 14*scale);
-      ctx.fill();
+      // grip (angled)
+      ctx.save();
+      ctx.translate(35*scale, 138*scale);
+      ctx.rotate(0.42);
+      fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
+      ctx.restore();
 
-      ctx.fillStyle = metal;
-      rr(120*scale, 62*scale, 110*scale, 18*scale, 10*scale);
-      ctx.fill();
+      // trigger guard
+      ctx.strokeStyle = "rgba(255,255,255,.08)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(60*scale, 135*scale, 16*scale, 0.2, Math.PI*1.2);
+      ctx.stroke();
     }
+
 
     // outline
     ctx.strokeStyle = edge;
