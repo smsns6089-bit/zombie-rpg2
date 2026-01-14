@@ -1927,7 +1927,6 @@ function drawWeaponViewmodel(w, dt) {
   game.recoil = Math.max(0, game.recoil - dt * 2.6);
   game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
 
-  // sizes
   const s = Math.min(W, H);
 
   // Base scale + big COD-ish size
@@ -1940,37 +1939,42 @@ function drawWeaponViewmodel(w, dt) {
 
   // -------- Recoil behavior --------
   const kick = game.recoil * 60;
-  const mx = -kick * 0.08;
-  const my =  kick * 0.55;
+  const mx = -kick * 0.10;    // little left kick
+  const my =  kick * 0.65;    // push down (gun goes up visually b/c we pivot)
+  const back = kick * 0.55;   // slide backward
 
   // -------- Subtle idle sway --------
   const t = performance.now() / 1000;
-  const swayX = Math.sin(t * 1.8) * 0.9;
-  const swayY = Math.cos(t * 2.1) * 0.7;
+  const swayX = Math.sin(t * 1.8) * 1.2;
+  const swayY = Math.cos(t * 2.1) * 0.9;
+
+  // A tiny “hand bob” to feel alive
+  const bob = Math.sin(t * 3.2) * 0.9;
 
   const x = baseX + mx + swayX;
-  const y = baseY + my + swayY;
+  const y = baseY + my + swayY + bob;
 
   ctx.save();
   ctx.translate(x, y);
 
-  // Aim the viewmodel toward the crosshair automatically
-  const aimX = W * 0.5;
-  const aimY = H * 0.5;
-  const aimAng = Math.atan2(aimY - y, aimX - x);
+  // ✅ COD-style: FIXED forward-facing rotation (no aiming at crosshair)
+  // Slight inward cant + tiny idle roll + recoil “snap”
+  const idleRoll = Math.sin(t * 1.8) * 0.015;
+  const recoilRot = game.recoil * 0.055;
+  const rot = (-0.10) + idleRoll - recoilRot; // tweak -0.10 to taste
+  ctx.rotate(rot);
 
-  // Gun art is drawn extending +X, so rotate to point at crosshair
-ctx.rotate(aimAng + Math.PI + game.recoil * 0.04);
-
-  // Pivot so it sits on-screen and doesn't "orbit"
-  // (ONLY ONE pivot translate. Too many = gun disappears)
-  ctx.translate(-220 * baseScale, -170 * baseScale);
+  // ✅ One clean pivot so it doesn't orbit
+  // Think of this as your “hand grip point”
+  const pivotX = -210 * baseScale;
+  const pivotY = -165 * baseScale;
+  ctx.translate(pivotX - back, pivotY);
 
   // weapon type
   const type = w ? w.type : "pistol";
 
-  // colors (these are fine even if you don't use all)
-  const edge  = "rgba(255,255,255,.12)";
+  // colors
+  const edge = "rgba(255,255,255,.12)";
 
   // helper
   function rr(x,y,w,h,r){
@@ -2023,6 +2027,9 @@ ctx.rotate(aimAng + Math.PI + game.recoil * 0.04);
     }
   }
 
+  // We'll store muzzle position in LOCAL gun coords (so flash stays glued to barrel)
+  let muzzleLX = 260, muzzleLY = 62;
+
   // ---- silhouettes ----
   if (player.usingKnife) {
     const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
@@ -2032,8 +2039,8 @@ ctx.rotate(aimAng + Math.PI + game.recoil * 0.04);
 
     fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
     fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
-    ctx.fillStyle = "rgba(255,255,255,.12)";
-    ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
+
+    muzzleLX = 160; muzzleLY = 42;
 
   } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
     fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
@@ -2060,6 +2067,9 @@ ctx.rotate(aimAng + Math.PI + game.recoil * 0.04);
 
     fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
 
+    // longer muzzle for rifles
+    muzzleLX = 390; muzzleLY = 62;
+
   } else {
     // pistol fallback
     fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);
@@ -2070,29 +2080,35 @@ ctx.rotate(aimAng + Math.PI + game.recoil * 0.04);
     ctx.rotate(0.42);
     fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
     ctx.restore();
+
+    muzzleLX = 260; muzzleLY = 102;
   }
 
-  // outline
+  // outline (only outlines the most recent rr path; looks fine as a subtle edge)
   ctx.strokeStyle = edge;
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // muzzle flash
+  // muzzle flash (glued to barrel tip now)
   if (game.muzzle > 0.001) {
     const a = clamp(game.muzzle / 0.06, 0, 1);
     ctx.save();
-    ctx.globalAlpha = 0.7 * a;
-    ctx.fillStyle = "rgba(255,210,80,.85)";
+    ctx.globalAlpha = 0.75 * a;
+    ctx.fillStyle = "rgba(255,210,80,.88)";
     ctx.beginPath();
-    ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+    ctx.ellipse(muzzleLX*scale, muzzleLY*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.35 * a;
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.beginPath();
+    ctx.ellipse((muzzleLX-10)*scale, (muzzleLY)*scale, 10*scale, 6*scale, 0, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
   }
 
-  // ✅ one restore only
   ctx.restore();
 }
-
 
   function render(dt) {
     const w = innerWidth, h = innerHeight;
