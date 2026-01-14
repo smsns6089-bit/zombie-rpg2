@@ -1920,286 +1920,524 @@
   // =========================
   // Gun Viewmodel (2D overlay)
   // =========================
- function drawWeaponViewmodel(w, dt) {
-  const W = innerWidth, H = innerHeight;
+  function drawWeaponViewmodel(w, dt) {
+    const W = innerWidth, H = innerHeight;
 
-  // Smooth recoil/muzzle back to 0
-  game.recoil = Math.max(0, game.recoil - dt * 2.6);
-  game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
+    // Smooth recoil/muzzle back to 0
+    game.recoil = Math.max(0, game.recoil - dt * 2.6);
+    game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
 
-  // base position + per-weapon tuning (more centered like your 2nd pic)
-  const wid = (w && (w.id || w.name)) ? String(w.id || w.name).toLowerCase() : "";
-  const type = w ? w.type : "pistol";
+    // base position (bottom-right)
+    const baseX = W * 0.78;
+    const baseY = H * 0.78;
 
-  const vm = {
-    pistol:   { x: 0.60, y: 0.84, sc: 1.05, rot: -0.06, muzzleX: 250, muzzleY: 82 },
-    smg:      { x: 0.58, y: 0.85, sc: 1.10, rot: -0.07, muzzleX: 285, muzzleY: 72 },
-    ar:       { x: 0.56, y: 0.86, sc: 1.16, rot: -0.08, muzzleX: 360, muzzleY: 62 },
-    special:  { x: 0.56, y: 0.86, sc: 1.18, rot: -0.08, muzzleX: 360, muzzleY: 62 },
-    shotgun:  { x: 0.55, y: 0.86, sc: 1.20, rot: -0.09, muzzleX: 420, muzzleY: 60 },
-    lmg:      { x: 0.55, y: 0.87, sc: 1.22, rot: -0.09, muzzleX: 400, muzzleY: 64 },
-    sniper:   { x: 0.53, y: 0.86, sc: 1.22, rot: -0.09, muzzleX: 460, muzzleY: 54 },
-    marksman: { x: 0.54, y: 0.86, sc: 1.20, rot: -0.09, muzzleX: 430, muzzleY: 56 },
-  };
+    // recoil offsets
+    const kick = game.recoil * 60;
+    const mx = -kick * 0.55;
+    const my = kick * 0.35;
 
-  let key = vm[type] ? type : "pistol";
+    // subtle idle sway
+    const t = performance.now() / 1000;
+    const swayX = Math.sin(t * 1.8) * 2.2;
+    const swayY = Math.cos(t * 2.1) * 1.6;
 
-  // OPTIONAL: force “marksman pistol” to use pistol tuning if you want
-  if (wid.includes("marksman") && type === "pistol") key = "pistol";
+    // final transform
+    const x = baseX + mx + swayX;
+    const y = baseY + my + swayY;
 
-  // safety fallback (prevents crash if key is missing)
-  const tune = vm[key] || vm.pistol;
+    ctx.save();
+    ctx.translate(x, y);
 
-  const baseX = W * tune.x;
-  const baseY = H * tune.y;
+    // gun tilt with recoil
+    ctx.rotate((-0.12) + game.recoil * 0.10);
 
-  // recoil offsets
-  const kick = game.recoil * 60;
-  const mx = -kick * 0.55;
-  const my = kick * 0.35;
+    // choose a “shape” based on weapon type
+    const type = w ? w.type : "pistol";
 
-  // subtle idle sway
-  const t = performance.now() / 1000;
-  const swayX = Math.sin(t * 1.8) * 2.2;
-  const swayY = Math.cos(t * 2.1) * 1.6;
+    // sizes
+    const s = Math.min(W, H);
+    const scale = clamp(s / 900, 0.85, 1.25);
 
-  // final transform
-  const x = baseX + mx + swayX;
-  const y = baseY + my + swayY;
+    // colors
+    const body = "rgba(22,24,30,.92)";
+    const metal = "rgba(120,130,150,.88)";
+    const grip  = "rgba(35,38,48,.92)";
+    const edge  = "rgba(255,255,255,.12)";
 
-  ctx.save();
-  ctx.translate(x, y);
-
-  // gun tilt with recoil
-  ctx.rotate((tune.rot ?? -0.12) + game.recoil * 0.10);
-
-  // sizes
-  const s = Math.min(W, H);
-  const scale = clamp(s / 900, 0.85, 1.25) * (tune.sc || 1.0);
-
-  // colors
-  const body = "rgba(22,24,30,.92)";
-  const metal = "rgba(120,130,150,.88)";
-  const grip  = "rgba(35,38,48,.92)";
-  const edge  = "rgba(255,255,255,.12)";
-
-  // helper
-  function rr(x,y,w,h,r){
-    r = Math.max(2, r);
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-  }
-
-  // --- mini helpers for nicer shading ---
-  function fillPart(x,y,w,h, r, baseA=0.92){
-    // soft vertical gradient for “3D-ish” feel
-    const g = ctx.createLinearGradient(0, y, 0, y+h);
-    g.addColorStop(0, `rgba(35,38,48,${baseA})`);
-    g.addColorStop(0.55, `rgba(20,22,28,${baseA})`);
-    g.addColorStop(1, `rgba(10,12,16,${baseA})`);
-    ctx.fillStyle = g;
-    rr(x,y,w,h,r); ctx.fill();
-
-    // top highlight
-    ctx.fillStyle = "rgba(255,255,255,.08)";
-    rr(x+2, y+2, w-4, Math.max(3, h*0.20), Math.max(2, r*0.7));
-    ctx.fill();
-
-    // bottom shadow lip
-    ctx.fillStyle = "rgba(0,0,0,.28)";
-    rr(x+2, y+h - Math.max(4, h*0.18), w-4, Math.max(4, h*0.18), Math.max(2, r*0.7));
-    ctx.fill();
-  }
-
-  function fillMetal(x,y,w,h, r){
-    const g = ctx.createLinearGradient(x, y, x+w, y);
-    g.addColorStop(0, "rgba(170,180,205,.65)");
-    g.addColorStop(0.35, "rgba(90,105,130,.55)");
-    g.addColorStop(0.7, "rgba(210,220,245,.55)");
-    g.addColorStop(1, "rgba(70,85,110,.55)");
-    ctx.fillStyle = g;
-    rr(x,y,w,h,r); ctx.fill();
-
-    ctx.fillStyle = "rgba(255,255,255,.10)";
-    ctx.fillRect(x+2, y+2, w-4, Math.max(2, h*0.25));
-  }
-
-  function boltScrews(x,y,w,h){
-    ctx.fillStyle = "rgba(255,255,255,.06)";
-    for (let i=0;i<4;i++){
+    // helper
+    function rr(x,y,w,h,r){
+      r = Math.max(2, r);
       ctx.beginPath();
-      ctx.arc(x + (i+1)*(w/5), y + h*0.55, Math.max(1.2, h*0.12), 0, Math.PI*2);
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+
+    // draw different silhouettes
+     // --- mini helpers for nicer shading ---
+    function fillPart(x,y,w,h, r, baseA=0.92){
+      // soft vertical gradient for “3D-ish” feel
+      const g = ctx.createLinearGradient(0, y, 0, y+h);
+      g.addColorStop(0, `rgba(35,38,48,${baseA})`);
+      g.addColorStop(0.55, `rgba(20,22,28,${baseA})`);
+      g.addColorStop(1, `rgba(10,12,16,${baseA})`);
+      ctx.fillStyle = g;
+      rr(x,y,w,h,r); ctx.fill();
+
+      // top highlight
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      rr(x+2, y+2, w-4, Math.max(3, h*0.20), Math.max(2, r*0.7));
+      ctx.fill();
+
+      // bottom shadow lip
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      rr(x+2, y+h - Math.max(4, h*0.18), w-4, Math.max(4, h*0.18), Math.max(2, r*0.7));
       ctx.fill();
     }
-  }
 
-  // draw different silhouettes (UPGRADED)
-  if (player.usingKnife) {
-    const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
-    const ang = 0.9 - swing * 1.8;
-    ctx.rotate(ang);
-    ctx.translate(40 * scale, 40 * scale);
+    function fillMetal(x,y,w,h, r){
+      const g = ctx.createLinearGradient(x, y, x+w, y);
+      g.addColorStop(0, "rgba(170,180,205,.65)");
+      g.addColorStop(0.35, "rgba(90,105,130,.55)");
+      g.addColorStop(0.7, "rgba(210,220,245,.55)");
+      g.addColorStop(1, "rgba(70,85,110,.55)");
+      ctx.fillStyle = g;
+      rr(x,y,w,h,r); ctx.fill();
 
-    // handle
-    fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
-    // blade
-    fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
-    ctx.fillStyle = "rgba(255,255,255,.12)";
-    ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
-
-  } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
-    // Modern AR/DMR silhouette
-    // receiver
-    fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
-    boltScrews(-20*scale, 56*scale, 290*scale, 62*scale);
-
-    // upper rail
-    fillMetal(40*scale, 44*scale, 170*scale, 12*scale, 6*scale);
-
-    // barrel
-    fillMetal(220*scale, 52*scale, 185*scale, 16*scale, 8*scale);
-
-    // handguard
-    ctx.fillStyle = "rgba(0,0,0,.26)";
-    rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.06)";
-    for (let i=0;i<5;i++){
-      ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
+      ctx.fillStyle = "rgba(255,255,255,.10)";
+      ctx.fillRect(x+2, y+2, w-4, Math.max(2, h*0.25));
     }
 
-    // magazine (angled)
-    ctx.save();
-    ctx.translate(105*scale, 110*scale);
-    ctx.rotate(0.18);
-    fillPart(-10*scale, -10*scale, 60*scale, 88*scale, 12*scale);
-    ctx.restore();
-
-    // grip
-    ctx.save();
-    ctx.translate(65*scale, 115*scale);
-    ctx.rotate(0.45);
-    fillPart(-10*scale, -10*scale, 48*scale, 70*scale, 14*scale);
-    ctx.restore();
-
-    // stock
-    fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
-    ctx.fillStyle = "rgba(0,0,0,.22)";
-    rr(-78*scale, 76*scale, 30*scale, 28*scale, 12*scale);
-    ctx.fill();
-
-    // optional scope for sniper/marksman
-    if (type === "sniper" || type === "marksman") {
-      fillPart(90*scale, 22*scale, 120*scale, 26*scale, 12*scale);
-      fillMetal(80*scale, 30*scale, 20*scale, 10*scale, 6*scale);
-      fillMetal(210*scale, 30*scale, 20*scale, 10*scale, 6*scale);
+    function boltScrews(x,y,w,h){
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.arc(x + (i+1)*(w/5), y + h*0.55, Math.max(1.2, h*0.12), 0, Math.PI*2);
+        ctx.fill();
+      }
     }
 
-  } else if (type === "smg") {
-    // SMG: compact receiver + short barrel
-    fillPart(-10*scale, 68*scale, 240*scale, 54*scale, 16*scale);
-    fillMetal(170*scale, 66*scale, 110*scale, 14*scale, 8*scale);
+    // draw different silhouettes (UPGRADED)
+    if (player.usingKnife) {
+      const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
+      const ang = 0.9 - swing * 1.8;
+      ctx.rotate(ang);
+      ctx.translate(40 * scale, 40 * scale);
 
-    // stick mag
-    ctx.save();
-    ctx.translate(85*scale, 118*scale);
-    ctx.rotate(0.08);
-    fillPart(-10*scale, -10*scale, 44*scale, 90*scale, 10*scale);
-    ctx.restore();
+      // handle
+      fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
+      // blade
+      fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
 
-    // grip
-    ctx.save();
-    ctx.translate(40*scale, 118*scale);
-    ctx.rotate(0.40);
-    fillPart(-10*scale, -10*scale, 44*scale, 64*scale, 12*scale);
-    ctx.restore();
+    } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
+      // Modern AR/DMR silhouette
+      // receiver
+      fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
+      boltScrews(-20*scale, 56*scale, 290*scale, 62*scale);
 
-    // mini stock
-    fillPart(-55*scale, 76*scale, 60*scale, 36*scale, 12*scale);
+      // upper rail
+      fillMetal(40*scale, 44*scale, 170*scale, 12*scale, 6*scale);
 
-  } else if (type === "shotgun") {
-    // Shotgun: fat tube + pump
-    fillPart(-20*scale, 62*scale, 270*scale, 66*scale, 18*scale);
-    fillMetal(200*scale, 52*scale, 220*scale, 18*scale, 10*scale); // barrel
+      // barrel
+      fillMetal(220*scale, 52*scale, 185*scale, 16*scale, 8*scale);
 
-    // pump
-    ctx.fillStyle = "rgba(0,0,0,.28)";
-    rr(70*scale, 82*scale, 90*scale, 34*scale, 12*scale);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.06)";
-    for (let i=0;i<4;i++) ctx.fillRect((78+i*18)*scale, 92*scale, 12*scale, 3*scale);
+      // handguard
+      ctx.fillStyle = "rgba(0,0,0,.26)";
+      rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<5;i++){
+        ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
+      }
 
-    // grip
-    ctx.save();
-    ctx.translate(40*scale, 122*scale);
-    ctx.rotate(0.45);
-    fillPart(-10*scale, -10*scale, 50*scale, 70*scale, 14*scale);
-    ctx.restore();
+      // magazine (angled)
+      ctx.save();
+      ctx.translate(105*scale, 110*scale);
+      ctx.rotate(0.18);
+      fillPart(-10*scale, -10*scale, 60*scale, 88*scale, 12*scale);
+      ctx.restore();
 
-    // stock
-    fillPart(-70*scale, 72*scale, 75*scale, 44*scale, 14*scale);
+      // grip
+      ctx.save();
+      ctx.translate(65*scale, 115*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 48*scale, 70*scale, 14*scale);
+      ctx.restore();
 
-  } else if (type === "lmg") {
-    // LMG: chunky + box mag
-    fillPart(-30*scale, 60*scale, 310*scale, 76*scale, 18*scale);
-    fillMetal(220*scale, 54*scale, 200*scale, 18*scale, 10*scale);
+      // stock
+      fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
+      ctx.fillStyle = "rgba(0,0,0,.22)";
+      rr(-78*scale, 76*scale, 30*scale, 28*scale, 12*scale);
+      ctx.fill();
 
-    // box mag
-    fillPart(110*scale, 125*scale, 86*scale, 70*scale, 12*scale);
-    ctx.fillStyle = "rgba(255,255,255,.05)";
-    ctx.fillRect(118*scale, 134*scale, 70*scale, 6*scale);
+      // optional scope for sniper/marksman
+      if (type === "sniper" || type === "marksman") {
+        fillPart(90*scale, 22*scale, 120*scale, 26*scale, 12*scale);
+        fillMetal(80*scale, 30*scale, 20*scale, 10*scale, 6*scale);
+        fillMetal(210*scale, 30*scale, 20*scale, 10*scale, 6*scale);
+      }
 
-    // grip
-    ctx.save();
-    ctx.translate(55*scale, 128*scale);
-    ctx.rotate(0.45);
-    fillPart(-10*scale, -10*scale, 52*scale, 76*scale, 14*scale);
-    ctx.restore();
+    } else if (type === "smg") {
+      // SMG: compact receiver + short barrel
+      fillPart(-10*scale, 68*scale, 240*scale, 54*scale, 16*scale);
+      fillMetal(170*scale, 66*scale, 110*scale, 14*scale, 8*scale);
 
-  } else {
-    // pistol (cleaner, more “real” proportions)
-    fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);  // slide/body
-    fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale); // barrel
+      // stick mag
+      ctx.save();
+      ctx.translate(85*scale, 118*scale);
+      ctx.rotate(0.08);
+      fillPart(-10*scale, -10*scale, 44*scale, 90*scale, 10*scale);
+      ctx.restore();
 
-    // grip (angled)
-    ctx.save();
-    ctx.translate(35*scale, 138*scale);
-    ctx.rotate(0.42);
-    fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
-    ctx.restore();
+      // grip
+      ctx.save();
+      ctx.translate(40*scale, 118*scale);
+      ctx.rotate(0.40);
+      fillPart(-10*scale, -10*scale, 44*scale, 64*scale, 12*scale);
+      ctx.restore();
 
-    // trigger guard
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(60*scale, 135*scale, 16*scale, 0.2, Math.PI*1.2);
+      // mini stock
+      fillPart(-55*scale, 76*scale, 60*scale, 36*scale, 12*scale);
+
+    } else if (type === "shotgun") {
+      // Shotgun: fat tube + pump
+      fillPart(-20*scale, 62*scale, 270*scale, 66*scale, 18*scale);
+      fillMetal(200*scale, 52*scale, 220*scale, 18*scale, 10*scale); // barrel
+
+      // pump
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      rr(70*scale, 82*scale, 90*scale, 34*scale, 12*scale);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      for (let i=0;i<4;i++) ctx.fillRect((78+i*18)*scale, 92*scale, 12*scale, 3*scale);
+
+      // grip
+      ctx.save();
+      ctx.translate(40*scale, 122*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 50*scale, 70*scale, 14*scale);
+      ctx.restore();
+
+      // stock
+      fillPart(-70*scale, 72*scale, 75*scale, 44*scale, 14*scale);
+
+    } else if (type === "lmg") {
+      // LMG: chunky + box mag
+      fillPart(-30*scale, 60*scale, 310*scale, 76*scale, 18*scale);
+      fillMetal(220*scale, 54*scale, 200*scale, 18*scale, 10*scale);
+
+      // box mag
+      fillPart(110*scale, 125*scale, 86*scale, 70*scale, 12*scale);
+      ctx.fillStyle = "rgba(255,255,255,.05)";
+      ctx.fillRect(118*scale, 134*scale, 70*scale, 6*scale);
+
+      // grip
+      ctx.save();
+      ctx.translate(55*scale, 128*scale);
+      ctx.rotate(0.45);
+      fillPart(-10*scale, -10*scale, 52*scale, 76*scale, 14*scale);
+      ctx.restore();
+
+    } else {
+      // pistol (cleaner, more “real” proportions)
+      fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);  // slide/body
+      fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale); // barrel
+
+      // grip (angled)
+      ctx.save();
+      ctx.translate(35*scale, 138*scale);
+      ctx.rotate(0.42);
+      fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
+      ctx.restore();
+
+      // trigger guard
+      ctx.strokeStyle = "rgba(255,255,255,.08)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(60*scale, 135*scale, 16*scale, 0.2, Math.PI*1.2);
+      ctx.stroke();
+    }
+
+
+    // outline
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 2;
     ctx.stroke();
-  }
 
-  // outline
-  ctx.strokeStyle = edge;
-  ctx.lineWidth = 2;
-  ctx.stroke();
+    // muzzle flash (simple)
+    if (game.muzzle > 0.001) {
+      const a = clamp(game.muzzle / 0.06, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.7 * a;
+      ctx.fillStyle = "rgba(255,210,80,.85)";
+      ctx.beginPath();
+      ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
 
-  // muzzle flash (simple)
-  if (game.muzzle > 0.001) {
-    const a = clamp(game.muzzle / 0.06, 0, 1);
-    ctx.save();
-    ctx.globalAlpha = 0.7 * a;
-    ctx.fillStyle = "rgba(255,210,80,.85)";
-    ctx.beginPath();
-    ctx.ellipse((tune.muzzleX)*scale, (tune.muzzleY)*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
-    ctx.fill();
     ctx.restore();
   }
 
-  ctx.restore();
-}
+  function render(dt) {
+    const w = innerWidth, h = innerHeight;
+    const horizon = (h / 2) + (player.pitch * (h * 0.35));
+
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(0, 0, w, horizon);
+    ctx.fillStyle = "#070a0f";
+    ctx.fillRect(0, horizon, w, h - horizon);
+
+    const rays = Math.floor(w / 2);
+    for (let i = 0; i < rays; i++) {
+      const pct = i / (rays - 1);
+      const ang = player.a - player.fov / 2 + pct * player.fov;
+
+      let d = castRay(ang);
+      d *= Math.cos(ang - player.a);
+
+      const wallH = Math.min(h, (h * 1.2) / (d + 0.0001));
+      const x = i * (w / rays);
+      const y = horizon - wallH / 2;
+
+      const shade = clamp(1 - d / 9, 0, 1);
+      const base = 55;
+      const bright = 150 * shade;
+      const c = Math.floor(base + bright);
+
+      ctx.fillStyle = `rgb(${c},${c + 10},${c + 25})`;
+      ctx.fillRect(x, y, (w / rays) + 1, wallH);
+
+      const fog = clamp((d - 3) / 10, 0, 0.85);
+      if (fog > 0) {
+        ctx.fillStyle = `rgba(8,10,14,${fog})`;
+        ctx.fillRect(x, y, (w / rays) + 1, wallH);
+      }
+    }
+
+    const sprites = [];
+
+    for (const b of bullets) sprites.push({ kind:"bullet", ref:b, x:b.x, y:b.y, d: dist(player.x, player.y, b.x, b.y) });
+    for (const im of impacts) sprites.push({ kind:"impact", ref:im, x:im.x, y:im.y, d: dist(player.x, player.y, im.x, im.y) });
+    for (const z of zombies) sprites.push({ kind:"z", ref:z, x:z.x, y:z.y, d: dist(player.x, player.y, z.x, z.y) });
+    for (const d0 of drops) sprites.push({ kind:"drop", ref:d0, x:d0.x, y:d0.y, d: dist(player.x, player.y, d0.x, d0.y) });
+
+    sprites.push({ kind:"shop", x:shopKiosk.x, y:shopKiosk.y, d: dist(player.x, player.y, shopKiosk.x, shopKiosk.y) });
+    sprites.push({ kind:"armor", x:armorStation.x, y:armorStation.y, d: dist(player.x, player.y, armorStation.x, armorStation.y) });
+    sprites.push({ kind:"box", x:mysteryBoxStation.x, y:mysteryBoxStation.y, d: dist(player.x, player.y, mysteryBoxStation.x, mysteryBoxStation.y) });
+
+    for (const pm of perkMachines) sprites.push({ kind:"perk", ref:pm, x:pm.x, y:pm.y, d: dist(player.x, player.y, pm.x, pm.y) });
+
+    sprites.sort((a,b) => b.d - a.d);
+
+    for (const s of sprites) {
+      const dx = s.x - player.x;
+      const dy = s.y - player.y;
+      const distTo = Math.hypot(dx, dy);
+
+      let ang = Math.atan2(dy, dx) - player.a;
+      while (ang > Math.PI) ang -= Math.PI * 2;
+      while (ang < -Math.PI) ang += Math.PI * 2;
+
+      if (Math.abs(ang) > player.fov / 2 + 0.35) continue;
+
+      const rayD = castRay(player.a + ang);
+      if (rayD + 0.05 < distTo) continue;
+
+      const screenX = (ang / (player.fov / 2)) * (w / 2) + (w / 2);
+      const size = clamp((h * 0.90) / (distTo + 0.001), 10, h * 1.25);
+
+      const spriteBottom = horizon + size * 0.35;
+      const top = spriteBottom - size;
+      const left = screenX - size / 2;
+
+      if (s.kind === "shop") {
+        drawBillboard(screenX, top, size * 0.92, "SHOP", "rgba(34,197,94,.95)", "Press Q");
+        continue;
+      }
+      if (s.kind === "armor") {
+        drawBillboard(screenX, top, size * 0.92, "ARMOR", "rgba(80,160,255,.95)", "Press E");
+        continue;
+      }
+      if (s.kind === "box") {
+        drawBillboard(screenX, top, size * 0.92, "MYSTERY", "rgba(255,190,80,.95)", `Press E • $${mysteryBoxStation.cost}`);
+        continue;
+      }
+      if (s.kind === "perk") {
+        const perk = perkById(s.ref.perkId);
+        const owned = perk && player.ownedPerks[perk.id];
+        const title = perk ? perk.name : "PERK";
+        const sub = perk ? (owned ? "Owned" : `$${perk.price} • Press E`) : "Press E";
+        drawBillboard(screenX, top, size * 0.92, title, perk ? perk.color : "rgba(255,255,255,.9)", sub);
+        continue;
+      }
+      if (s.kind === "drop") {
+        const d0 = s.ref;
+        let col = "rgba(34,197,94,.9)";
+        let label = "$";
+        if (d0.kind === "scrap") { col = "rgba(160,175,190,.92)"; label = "S"; }
+        if (d0.kind === "ess")   { col = "rgba(200,80,255,.92)";  label = "E"; }
+
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(screenX, horizon + size * 0.10, Math.max(6, size * 0.09), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(0,0,0,.55)";
+        ctx.font = "900 14px system-ui";
+        ctx.fillText(label, screenX - 5, horizon + size * 0.10 + 5);
+        continue;
+      }
+      if (s.kind === "bullet") {
+        const bsz = Math.max(2, size * 0.08);
+        ctx.fillStyle = "rgba(0,0,0,.70)";
+        ctx.beginPath();
+        ctx.arc(screenX, horizon + size * 0.05, bsz * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+      if (s.kind === "impact") {
+        const im = s.ref;
+        const a = clamp(1 - (im.t / im.life), 0, 1);
+        const puff = size * (0.10 + im.s * 0.30) * (0.8 + im.t * 2.0);
+
+        ctx.fillStyle = `rgba(210,220,235,${0.16 * a})`;
+        ctx.beginPath();
+        ctx.arc(screenX, horizon + size * 0.08, puff, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(20,22,28,${0.18 * a})`;
+        ctx.beginPath();
+        ctx.arc(screenX, horizon + size * 0.08, puff * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (const p of im.p) {
+          const sx = screenX + Math.cos(p.a) * (p.v * size * 0.18) * im.t;
+          const sy = (horizon + size * 0.08) + Math.sin(p.a) * (p.v * size * 0.10) * im.t;
+          const rr0 = Math.max(1, size * p.r);
+          ctx.fillStyle = `rgba(255,210,80,${0.22 * a})`;
+          ctx.fillRect(sx - rr0*0.5, sy - rr0*0.5, rr0, rr0);
+        }
+        continue;
+      }
+
+      if (s.kind === "z") {
+        const z = s.ref;
+
+        const runner = z.type === "runner";
+        const chaser = z.role === "chaser";
+
+        const baseBody = runner ? [239,68,68] : [155,170,185];
+        const baseDark = runner ? [120,20,20] : [65,78,92];
+
+        const t = (performance.now() / 1000) + z.animSeed;
+        const pace = (runner ? 9.0 : 6.0) * (chaser ? 1.18 : 1.0);
+
+        const walk = Math.sin(t * pace);
+        const walk2 = Math.sin(t * pace + Math.PI/2);
+        const sway = Math.sin(t * pace * 0.5);
+        const bob = Math.abs(walk) * (size * 0.018);
+        const lean = sway * (size * 0.03);
+
+        const shade = clamp(1 - distTo / 11, 0.2, 1);
+        const bc = `rgba(${Math.floor(baseBody[0]*shade)},${Math.floor(baseBody[1]*shade)},${Math.floor(baseBody[2]*shade)},.92)`;
+        const dc = `rgba(${Math.floor(baseDark[0]*shade)},${Math.floor(baseDark[1]*shade)},${Math.floor(baseDark[2]*shade)},.92)`;
+        const oc = `rgba(0,0,0,${0.22 * shade})`;
+
+        const headR = size * 0.12;
+        const torsoW = size * 0.44;
+        const torsoH = size * 0.48;
+
+        const torsoX = left + size*0.28 + lean*0.08;
+        const torsoY = top + size*0.34 + bob;
+
+        const legSwing = walk * (size * 0.06);
+        const legW = size * 0.11;
+        const legH = size * 0.27;
+        const legY = top + size*0.70 + bob;
+
+        const armSwing = -walk * (size * 0.07);
+        const armW = size * 0.13;
+        const armH = size * 0.36;
+        const armY = top + size*0.41 + bob;
+
+        ctx.fillStyle = "rgba(0,0,0,.22)";
+        ctx.beginPath();
+        ctx.ellipse(screenX, horizon + size*0.34, size*0.18, size*0.07, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = oc;
+        ctx.fillRect(left + size*0.35 + legSwing - 2, legY - 2, legW + 4, legH + 4);
+        ctx.fillRect(left + size*0.54 - legSwing - 2, legY - 2, legW + 4, legH + 4);
+        ctx.fillRect(torsoX - 3, torsoY - 3, torsoW + 6, torsoH + 6);
+        ctx.fillRect(left + size*0.17 + armSwing - 2, armY - 2, armW + 4, armH + 4);
+        ctx.fillRect(left + size*0.70 - armSwing - 2, armY - 2, armW + 4, armH + 4);
+
+        ctx.fillStyle = dc;
+        ctx.fillRect(left + size*0.36 + legSwing, legY, legW, legH);
+        ctx.fillRect(left + size*0.54 - legSwing, legY, legW, legH);
+
+        ctx.fillStyle = bc;
+        ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
+        ctx.fillStyle = "rgba(0,0,0,.12)";
+        ctx.fillRect(torsoX + torsoW*0.55, torsoY, torsoW*0.45, torsoH);
+
+        ctx.fillStyle = dc;
+        ctx.fillRect(left + size*0.18 + armSwing, armY, armW, armH);
+        ctx.fillRect(left + size*0.70 - armSwing, armY, armW, armH);
+
+        const headX = screenX + lean*0.10;
+        const headY = top + size*0.24 + bob + walk2 * (size*0.02);
+
+        ctx.fillStyle = oc;
+        ctx.beginPath();
+        ctx.arc(headX, headY, headR * 1.10, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = bc;
+        ctx.beginPath();
+        ctx.arc(headX, headY, headR, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(0,0,0,.22)";
+        ctx.beginPath();
+        ctx.arc(headX + headR*0.18, headY + headR*0.15, headR*0.85, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(0,0,0,.48)";
+        ctx.fillRect(headX - headR*0.55, headY - headR*0.10, headR*0.35, headR*0.22);
+        ctx.fillRect(headX + headR*0.20, headY - headR*0.10, headR*0.35, headR*0.22);
+
+        if (chaser) {
+          ctx.fillStyle = "rgba(255,80,80,.16)";
+          ctx.beginPath();
+          ctx.arc(headX, headY, headR*1.55, 0, Math.PI*2);
+          ctx.fill();
+        }
+
+        const pct = clamp(z.hp / z.maxHp, 0, 1);
+        ctx.fillStyle = "rgba(0,0,0,.35)";
+        ctx.fillRect(left, top - 10, size, 6);
+        ctx.fillStyle = "rgba(34,197,94,.9)";
+        ctx.fillRect(left, top - 10, size * pct, 6);
+      }
+    }
+
+    // crosshair
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 2;
+    const cx = w / 2, cy = h / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, cy); ctx.lineTo(cx - 3, cy);
+    ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 10, cy);
+    ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 3);
+    ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 10);
+    ctx.stroke();
 
     drawMinimap();
     drawWeaponViewmodel(currentWeapon(), dt);
