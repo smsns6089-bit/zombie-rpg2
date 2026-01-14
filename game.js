@@ -1929,51 +1929,49 @@ function drawWeaponViewmodel(w, dt) {
 
   const s = Math.min(W, H);
 
-  // Base scale + big COD-ish size
+  // Big COD-ish size
   const baseScale = clamp(s / 900, 0.85, 1.25);
-  const scale = baseScale * 1.85;
+  const scale = baseScale * 1.95;
 
-  // -------- Viewmodel placement --------
-  const baseX = W * 0.58;
-  const baseY = H * 0.88;
+  // --- Warzone placement (low-right) ---
+  const baseX = W * 0.70;
+  const baseY = H * 0.93;
 
-  // -------- Recoil behavior --------
+  // --- Recoil ---
   const kick = game.recoil * 60;
-  const mx = -kick * 0.10;    // little left kick
-  const my =  kick * 0.65;    // push down (gun goes up visually b/c we pivot)
-  const back = kick * 0.55;   // slide backward
+  const back = kick * 0.75;      // slide backward
+  const up   = kick * 0.55;      // lift
+  const left = kick * 0.18;      // slight left
 
-  // -------- Subtle idle sway --------
+  // --- Idle sway ---
   const t = performance.now() / 1000;
-  const swayX = Math.sin(t * 1.8) * 1.2;
-  const swayY = Math.cos(t * 2.1) * 0.9;
+  const swayX = Math.sin(t * 1.7) * 1.4;
+  const swayY = Math.cos(t * 2.0) * 1.1;
+  const bob   = Math.sin(t * 3.1) * 0.8;
 
-  // A tiny “hand bob” to feel alive
-  const bob = Math.sin(t * 3.2) * 0.9;
-
-  const x = baseX + mx + swayX;
-  const y = baseY + my + swayY + bob;
+  const x = baseX + swayX - left;
+  const y = baseY + swayY + bob + up;
 
   ctx.save();
   ctx.translate(x, y);
 
-  // ✅ COD-style: FIXED forward-facing rotation (no aiming at crosshair)
-  // Slight inward cant + tiny idle roll + recoil “snap”
-  const idleRoll = Math.sin(t * 1.8) * 0.015;
-  const recoilRot = game.recoil * 0.055;
-  const rot = (-0.10) + idleRoll - recoilRot; // tweak -0.10 to taste
-  ctx.rotate(rot - Math.PI / 2); // ✅ turn gun from ➡️ to ⬆️
+  // --- Rotation ---
+  // Make sideways art point UP:
+  // base "up" rotation = -90deg
+  // add Warzone cant + tiny idle roll + recoil snap
+  const idleRoll  = Math.sin(t * 1.5) * 0.02;
+  const recoilRot = game.recoil * 0.085;
+  const warzoneCant = -0.12; // inward tilt (tweak -0.08 to -0.18)
+  ctx.rotate((-Math.PI / 2) + warzoneCant + idleRoll - recoilRot);
 
-  // ✅ One clean pivot so it doesn't orbit
-  // Think of this as your “hand grip point”
-  const pivotX = -120 * baseScale;
-  const pivotY = -105 * baseScale;
-  ctx.translate(pivotX - back, pivotY);
+  // --- Single pivot (hand grip point) ---
+  // After rotating up, the model's "length" is vertical,
+  // so pivotY is bigger than pivotX.
+  const pivotX = -115 * baseScale;
+  const pivotY = -235 * baseScale;
+  ctx.translate(pivotX, pivotY + back); // +back moves it "down" in local-up space
 
-  // weapon type
   const type = w ? w.type : "pistol";
-
-  // colors
   const edge = "rgba(255,255,255,.12)";
 
   // helper
@@ -2027,20 +2025,21 @@ function drawWeaponViewmodel(w, dt) {
     }
   }
 
-  // We'll store muzzle position in LOCAL gun coords (so flash stays glued to barrel)
-  let muzzleLX = 260, muzzleLY = 62;
+  // Muzzle position in LOCAL coords (after rotation to UP)
+  // We'll override per weapon below.
+  let muzzleLX = 140, muzzleLY = -40;
 
   // ---- silhouettes ----
   if (player.usingKnife) {
     const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
     const ang = 0.9 - swing * 1.8;
     ctx.rotate(ang);
-    ctx.translate(40 * scale, 40 * scale);
+    ctx.translate(30 * scale, 20 * scale);
 
     fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
     fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
 
-    muzzleLX = 160; muzzleLY = 42;
+    muzzleLX = 70; muzzleLY = -10;
 
   } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
     fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
@@ -2067,11 +2066,11 @@ function drawWeaponViewmodel(w, dt) {
 
     fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
 
-    // longer muzzle for rifles
-    muzzleLX = 390; muzzleLY = 62;
+    // longer muzzle for rifles (UP)
+    muzzleLX = 165; muzzleLY = -85;
 
   } else {
-    // pistol fallback
+    // pistol
     fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);
     fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale);
 
@@ -2081,15 +2080,15 @@ function drawWeaponViewmodel(w, dt) {
     fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
     ctx.restore();
 
-    muzzleLX = 260; muzzleLY = 102;
+    muzzleLX = 135; muzzleLY = -55;
   }
 
-  // outline (only outlines the most recent rr path; looks fine as a subtle edge)
+  // subtle edge stroke
   ctx.strokeStyle = edge;
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // muzzle flash (glued to barrel tip now)
+  // muzzle flash
   if (game.muzzle > 0.001) {
     const a = clamp(game.muzzle / 0.06, 0, 1);
     ctx.save();
@@ -2102,7 +2101,7 @@ function drawWeaponViewmodel(w, dt) {
     ctx.globalAlpha = 0.35 * a;
     ctx.fillStyle = "rgba(255,255,255,.9)";
     ctx.beginPath();
-    ctx.ellipse((muzzleLX-10)*scale, (muzzleLY)*scale, 10*scale, 6*scale, 0, 0, Math.PI*2);
+    ctx.ellipse((muzzleLX-10)*scale, (muzzleLY+6)*scale, 10*scale, 6*scale, 0, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
   }
@@ -2110,260 +2109,6 @@ function drawWeaponViewmodel(w, dt) {
   ctx.restore();
 }
 
-  function render(dt) {
-    const w = innerWidth, h = innerHeight;
-    const horizon = (h / 2) + (player.pitch * (h * 0.35));
-
-    ctx.fillStyle = "#0b1220";
-    ctx.fillRect(0, 0, w, horizon);
-    ctx.fillStyle = "#070a0f";
-    ctx.fillRect(0, horizon, w, h - horizon);
-
-    const rays = Math.floor(w / 2);
-    for (let i = 0; i < rays; i++) {
-      const pct = i / (rays - 1);
-      const ang = player.a - player.fov / 2 + pct * player.fov;
-
-      let d = castRay(ang);
-      d *= Math.cos(ang - player.a);
-
-      const wallH = Math.min(h, (h * 1.2) / (d + 0.0001));
-      const x = i * (w / rays);
-      const y = horizon - wallH / 2;
-
-      const shade = clamp(1 - d / 9, 0, 1);
-      const base = 55;
-      const bright = 150 * shade;
-      const c = Math.floor(base + bright);
-
-      ctx.fillStyle = `rgb(${c},${c + 10},${c + 25})`;
-      ctx.fillRect(x, y, (w / rays) + 1, wallH);
-
-      const fog = clamp((d - 3) / 10, 0, 0.85);
-      if (fog > 0) {
-        ctx.fillStyle = `rgba(8,10,14,${fog})`;
-        ctx.fillRect(x, y, (w / rays) + 1, wallH);
-      }
-    }
-
-    const sprites = [];
-
-    for (const b of bullets) sprites.push({ kind:"bullet", ref:b, x:b.x, y:b.y, d: dist(player.x, player.y, b.x, b.y) });
-    for (const im of impacts) sprites.push({ kind:"impact", ref:im, x:im.x, y:im.y, d: dist(player.x, player.y, im.x, im.y) });
-    for (const z of zombies) sprites.push({ kind:"z", ref:z, x:z.x, y:z.y, d: dist(player.x, player.y, z.x, z.y) });
-    for (const d0 of drops) sprites.push({ kind:"drop", ref:d0, x:d0.x, y:d0.y, d: dist(player.x, player.y, d0.x, d0.y) });
-
-    sprites.push({ kind:"shop", x:shopKiosk.x, y:shopKiosk.y, d: dist(player.x, player.y, shopKiosk.x, shopKiosk.y) });
-    sprites.push({ kind:"armor", x:armorStation.x, y:armorStation.y, d: dist(player.x, player.y, armorStation.x, armorStation.y) });
-    sprites.push({ kind:"box", x:mysteryBoxStation.x, y:mysteryBoxStation.y, d: dist(player.x, player.y, mysteryBoxStation.x, mysteryBoxStation.y) });
-
-    for (const pm of perkMachines) sprites.push({ kind:"perk", ref:pm, x:pm.x, y:pm.y, d: dist(player.x, player.y, pm.x, pm.y) });
-
-    sprites.sort((a,b) => b.d - a.d);
-
-    for (const s of sprites) {
-      const dx = s.x - player.x;
-      const dy = s.y - player.y;
-      const distTo = Math.hypot(dx, dy);
-
-      let ang = Math.atan2(dy, dx) - player.a;
-      while (ang > Math.PI) ang -= Math.PI * 2;
-      while (ang < -Math.PI) ang += Math.PI * 2;
-
-      if (Math.abs(ang) > player.fov / 2 + 0.35) continue;
-
-      const rayD = castRay(player.a + ang);
-      if (rayD + 0.05 < distTo) continue;
-
-      const screenX = (ang / (player.fov / 2)) * (w / 2) + (w / 2);
-      const size = clamp((h * 0.90) / (distTo + 0.001), 10, h * 1.25);
-
-      const spriteBottom = horizon + size * 0.35;
-      const top = spriteBottom - size;
-      const left = screenX - size / 2;
-
-      if (s.kind === "shop") {
-        drawBillboard(screenX, top, size * 0.92, "SHOP", "rgba(34,197,94,.95)", "Press Q");
-        continue;
-      }
-      if (s.kind === "armor") {
-        drawBillboard(screenX, top, size * 0.92, "ARMOR", "rgba(80,160,255,.95)", "Press E");
-        continue;
-      }
-      if (s.kind === "box") {
-        drawBillboard(screenX, top, size * 0.92, "MYSTERY", "rgba(255,190,80,.95)", `Press E • $${mysteryBoxStation.cost}`);
-        continue;
-      }
-      if (s.kind === "perk") {
-        const perk = perkById(s.ref.perkId);
-        const owned = perk && player.ownedPerks[perk.id];
-        const title = perk ? perk.name : "PERK";
-        const sub = perk ? (owned ? "Owned" : `$${perk.price} • Press E`) : "Press E";
-        drawBillboard(screenX, top, size * 0.92, title, perk ? perk.color : "rgba(255,255,255,.9)", sub);
-        continue;
-      }
-      if (s.kind === "drop") {
-        const d0 = s.ref;
-        let col = "rgba(34,197,94,.9)";
-        let label = "$";
-        if (d0.kind === "scrap") { col = "rgba(160,175,190,.92)"; label = "S"; }
-        if (d0.kind === "ess")   { col = "rgba(200,80,255,.92)";  label = "E"; }
-
-        ctx.fillStyle = col;
-        ctx.beginPath();
-        ctx.arc(screenX, horizon + size * 0.10, Math.max(6, size * 0.09), 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "rgba(0,0,0,.55)";
-        ctx.font = "900 14px system-ui";
-        ctx.fillText(label, screenX - 5, horizon + size * 0.10 + 5);
-        continue;
-      }
-      if (s.kind === "bullet") {
-        const bsz = Math.max(2, size * 0.08);
-        ctx.fillStyle = "rgba(0,0,0,.70)";
-        ctx.beginPath();
-        ctx.arc(screenX, horizon + size * 0.05, bsz * 0.18, 0, Math.PI * 2);
-        ctx.fill();
-        continue;
-      }
-      if (s.kind === "impact") {
-        const im = s.ref;
-        const a = clamp(1 - (im.t / im.life), 0, 1);
-        const puff = size * (0.10 + im.s * 0.30) * (0.8 + im.t * 2.0);
-
-        ctx.fillStyle = `rgba(210,220,235,${0.16 * a})`;
-        ctx.beginPath();
-        ctx.arc(screenX, horizon + size * 0.08, puff, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = `rgba(20,22,28,${0.18 * a})`;
-        ctx.beginPath();
-        ctx.arc(screenX, horizon + size * 0.08, puff * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-
-        for (const p of im.p) {
-          const sx = screenX + Math.cos(p.a) * (p.v * size * 0.18) * im.t;
-          const sy = (horizon + size * 0.08) + Math.sin(p.a) * (p.v * size * 0.10) * im.t;
-          const rr0 = Math.max(1, size * p.r);
-          ctx.fillStyle = `rgba(255,210,80,${0.22 * a})`;
-          ctx.fillRect(sx - rr0*0.5, sy - rr0*0.5, rr0, rr0);
-        }
-        continue;
-      }
-
-      if (s.kind === "z") {
-        const z = s.ref;
-
-        const runner = z.type === "runner";
-        const chaser = z.role === "chaser";
-
-        const baseBody = runner ? [239,68,68] : [155,170,185];
-        const baseDark = runner ? [120,20,20] : [65,78,92];
-
-        const t = (performance.now() / 1000) + z.animSeed;
-        const pace = (runner ? 9.0 : 6.0) * (chaser ? 1.18 : 1.0);
-
-        const walk = Math.sin(t * pace);
-        const walk2 = Math.sin(t * pace + Math.PI/2);
-        const sway = Math.sin(t * pace * 0.5);
-        const bob = Math.abs(walk) * (size * 0.018);
-        const lean = sway * (size * 0.03);
-
-        const shade = clamp(1 - distTo / 11, 0.2, 1);
-        const bc = `rgba(${Math.floor(baseBody[0]*shade)},${Math.floor(baseBody[1]*shade)},${Math.floor(baseBody[2]*shade)},.92)`;
-        const dc = `rgba(${Math.floor(baseDark[0]*shade)},${Math.floor(baseDark[1]*shade)},${Math.floor(baseDark[2]*shade)},.92)`;
-        const oc = `rgba(0,0,0,${0.22 * shade})`;
-
-        const headR = size * 0.12;
-        const torsoW = size * 0.44;
-        const torsoH = size * 0.48;
-
-        const torsoX = left + size*0.28 + lean*0.08;
-        const torsoY = top + size*0.34 + bob;
-
-        const legSwing = walk * (size * 0.06);
-        const legW = size * 0.11;
-        const legH = size * 0.27;
-        const legY = top + size*0.70 + bob;
-
-        const armSwing = -walk * (size * 0.07);
-        const armW = size * 0.13;
-        const armH = size * 0.36;
-        const armY = top + size*0.41 + bob;
-
-        ctx.fillStyle = "rgba(0,0,0,.22)";
-        ctx.beginPath();
-        ctx.ellipse(screenX, horizon + size*0.34, size*0.18, size*0.07, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle = oc;
-        ctx.fillRect(left + size*0.35 + legSwing - 2, legY - 2, legW + 4, legH + 4);
-        ctx.fillRect(left + size*0.54 - legSwing - 2, legY - 2, legW + 4, legH + 4);
-        ctx.fillRect(torsoX - 3, torsoY - 3, torsoW + 6, torsoH + 6);
-        ctx.fillRect(left + size*0.17 + armSwing - 2, armY - 2, armW + 4, armH + 4);
-        ctx.fillRect(left + size*0.70 - armSwing - 2, armY - 2, armW + 4, armH + 4);
-
-        ctx.fillStyle = dc;
-        ctx.fillRect(left + size*0.36 + legSwing, legY, legW, legH);
-        ctx.fillRect(left + size*0.54 - legSwing, legY, legW, legH);
-
-        ctx.fillStyle = bc;
-        ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
-        ctx.fillStyle = "rgba(0,0,0,.12)";
-        ctx.fillRect(torsoX + torsoW*0.55, torsoY, torsoW*0.45, torsoH);
-
-        ctx.fillStyle = dc;
-        ctx.fillRect(left + size*0.18 + armSwing, armY, armW, armH);
-        ctx.fillRect(left + size*0.70 - armSwing, armY, armW, armH);
-
-        const headX = screenX + lean*0.10;
-        const headY = top + size*0.24 + bob + walk2 * (size*0.02);
-
-        ctx.fillStyle = oc;
-        ctx.beginPath();
-        ctx.arc(headX, headY, headR * 1.10, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle = bc;
-        ctx.beginPath();
-        ctx.arc(headX, headY, headR, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle = "rgba(0,0,0,.22)";
-        ctx.beginPath();
-        ctx.arc(headX + headR*0.18, headY + headR*0.15, headR*0.85, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle = "rgba(0,0,0,.48)";
-        ctx.fillRect(headX - headR*0.55, headY - headR*0.10, headR*0.35, headR*0.22);
-        ctx.fillRect(headX + headR*0.20, headY - headR*0.10, headR*0.35, headR*0.22);
-
-        if (chaser) {
-          ctx.fillStyle = "rgba(255,80,80,.16)";
-          ctx.beginPath();
-          ctx.arc(headX, headY, headR*1.55, 0, Math.PI*2);
-          ctx.fill();
-        }
-
-        const pct = clamp(z.hp / z.maxHp, 0, 1);
-        ctx.fillStyle = "rgba(0,0,0,.35)";
-        ctx.fillRect(left, top - 10, size, 6);
-        ctx.fillStyle = "rgba(34,197,94,.9)";
-        ctx.fillRect(left, top - 10, size * pct, 6);
-      }
-    }
-
-    // crosshair
-    ctx.strokeStyle = "rgba(255,255,255,.55)";
-    ctx.lineWidth = 2;
-    const cx = w / 2, cy = h / 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy); ctx.lineTo(cx - 3, cy);
-    ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 10, cy);
-    ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 3);
-    ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 10);
-    ctx.stroke();
 
     drawMinimap();
     drawWeaponViewmodel(currentWeapon(), dt);
