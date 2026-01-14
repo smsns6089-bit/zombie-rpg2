@@ -1962,7 +1962,7 @@ function drawWeaponViewmodel(w, dt) {
   const idleRoll = Math.sin(t * 1.8) * 0.015;
   const recoilRot = game.recoil * 0.055;
   const rot = (-0.10) + idleRoll - recoilRot; // tweak -0.10 to taste
-  ctx.rotate(rot);
+  ctx.rotate(rot - Math.PI / 2); // ✅ turn gun from ➡️ to ⬆️
 
   // ✅ One clean pivot so it doesn't orbit
   // Think of this as your “hand grip point”
