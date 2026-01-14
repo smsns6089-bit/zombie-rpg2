@@ -1927,9 +1927,29 @@
     game.recoil = Math.max(0, game.recoil - dt * 2.6);
     game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
 
-    // base position (bottom-right)
-    const baseX = W * 0.78;
-    const baseY = H * 0.78;
+   // base position + per-weapon tuning (more centered like your 2nd pic)
+const wid = (w && (w.id || w.name)) ? String(w.id || w.name).toLowerCase() : "";
+const type = w ? w.type : "pistol";
+
+const vm = {
+  pistol:   { x: 0.60, y: 0.84, sc: 1.05, rot: -0.06, muzzleX: 250, muzzleY: 82 },
+  smg:      { x: 0.58, y: 0.85, sc: 1.10, rot: -0.07, muzzleX: 285, muzzleY: 72 },
+  ar:       { x: 0.56, y: 0.86, sc: 1.16, rot: -0.08, muzzleX: 360, muzzleY: 62 },
+  special:  { x: 0.56, y: 0.86, sc: 1.18, rot: -0.08, muzzleX: 360, muzzleY: 62 },
+  shotgun:  { x: 0.55, y: 0.86, sc: 1.20, rot: -0.09, muzzleX: 420, muzzleY: 60 },
+  lmg:      { x: 0.55, y: 0.87, sc: 1.22, rot: -0.09, muzzleX: 400, muzzleY: 64 },
+  sniper:   { x: 0.53, y: 0.86, sc: 1.22, rot: -0.09, muzzleX: 460, muzzleY: 54 },
+  marksman: { x: 0.54, y: 0.86, sc: 1.20, rot: -0.09, muzzleX: 430, muzzleY: 56 },
+};
+
+let key = vm[type] ? type : "pistol";
+
+// OPTIONAL: force “marksman pistol” to use pistol tuning if you want
+if (wid.includes("marksman") && type === "pistol") key = "pistol";
+
+const baseX = W * vm[key].x;
+const baseY = H * vm[key].y;
+
 
     // recoil offsets
     const kick = game.recoil * 60;
@@ -1949,14 +1969,14 @@
     ctx.translate(x, y);
 
     // gun tilt with recoil
-    ctx.rotate((-0.12) + game.recoil * 0.10);
+   ctx.rotate((vm[key]?.rot ?? -0.12) + game.recoil * 0.10);
 
     // choose a “shape” based on weapon type
     const type = w ? w.type : "pistol";
 
     // sizes
     const s = Math.min(W, H);
-    const scale = clamp(s / 900, 0.85, 1.25);
+   const scale = clamp(s / 900, 0.85, 1.25) * (vm[key]?.sc || 1.0);
 
     // colors
     const body = "rgba(22,24,30,.92)";
@@ -2176,8 +2196,8 @@
       ctx.globalAlpha = 0.7 * a;
       ctx.fillStyle = "rgba(255,210,80,.85)";
       ctx.beginPath();
-      ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
-      ctx.fill();
+     ctx.ellipse((vm[key].muzzleX)*scale, (vm[key].muzzleY)*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+    ctx.fill();
       ctx.restore();
     }
 
