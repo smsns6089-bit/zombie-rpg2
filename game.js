@@ -1949,7 +1949,8 @@
     ctx.translate(x, y);
 
     // gun tilt with recoil
-   ctx.rotate((-0.68) + game.recoil * 0.05);
+  ctx.rotate((-1.15) + game.recoil * 0.05);
+ctx.translate(-120 * scale, -120 * scale);
 
     // choose a “shape” based on weapon type
     const type = w ? w.type : "pistol";
