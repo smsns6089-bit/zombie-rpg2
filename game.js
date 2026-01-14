@@ -1957,8 +1957,8 @@ function drawWeaponViewmodel(w, dt) {
   // -------- Forward facing angle --------
   // “Point forward” knob:
   // more negative = points more toward center
-  const forwardAngle = -1.15;
-  ctx.rotate(forwardAngle + game.recoil * 0.04);
+ const forwardAngle = -1.35;   // more forward
+ ctx.rotate(forwardAngle + game.recoil * 0.04);
 
   // 🔥 PIVOT FIX (this is what makes it feel "held", not "orbiting")
   ctx.translate(-220 * scale, -170 * scale);
