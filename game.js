@@ -1930,14 +1930,11 @@ function drawWeaponViewmodel(w, dt) {
   // sizes
   const s = Math.min(W, H);
 
-  // Base scale (keep this separate so pivot doesn't explode)
+  // Base scale + big COD-ish size
   const baseScale = clamp(s / 900, 0.85, 1.25);
-
-  // 🔥 Big COD-ish size
   const scale = baseScale * 1.85;
 
   // -------- Viewmodel placement --------
-  // (0.62–0.70 is a good range)
   const baseX = W * 0.72;
   const baseY = H * 0.94;
 
@@ -1957,34 +1954,25 @@ function drawWeaponViewmodel(w, dt) {
   ctx.save();
   ctx.translate(x, y);
 
-  // -------- Forward facing angle --------
-  // More negative = points more toward center (try -0.95 to -1.25)
-// Aim the viewmodel toward the crosshair automatically (no guessing angles)
-const aimX = W * 0.5;
-const aimY = H * 0.5;
+  // Aim the viewmodel toward the crosshair automatically
+  const aimX = W * 0.5;
+  const aimY = H * 0.5;
+  const aimAng = Math.atan2(aimY - y, aimX - x);
 
-// angle from gun position to crosshair
-const aimAng = Math.atan2(aimY - y, aimX - x);
+  // Gun art is drawn extending +X, so rotate to point at crosshair
+  ctx.rotate(aimAng + game.recoil * 0.04);
 
-// rotate so the gun (drawn in +X direction) points at crosshair
-ctx.rotate(aimAng + game.recoil * 0.04);
-
-// Pivot + lift into view (keeps it on-screen)
-ctx.translate(-80 * baseScale, -220 * baseScale);
-
-  // ✅ PIVOT FIX:
-  // Use baseScale here (NOT the big "scale"), otherwise it flies off screen.
+  // Pivot so it sits on-screen and doesn't "orbit"
+  // (ONLY ONE pivot translate. Too many = gun disappears)
   ctx.translate(-220 * baseScale, -170 * baseScale);
 
   // weapon type
   const type = w ? w.type : "pistol";
 
-  // colors
-  const body  = "rgba(22,24,30,.92)";
-  const metal = "rgba(120,130,150,.88)";
-  const grip  = "rgba(35,38,48,.92)";
+  // colors (these are fine even if you don't use all)
   const edge  = "rgba(255,255,255,.12)";
 
+  // helper
   function rr(x,y,w,h,r){
     r = Math.max(2, r);
     ctx.beginPath();
@@ -2101,13 +2089,10 @@ ctx.translate(-80 * baseScale, -220 * baseScale);
     ctx.restore();
   }
 
-  // ✅ CRITICAL: this stops the “spinning screen”
+  // ✅ one restore only
   ctx.restore();
 }
 
-
-  ctx.restore(); // IMPORTANT: prevents “spinning screen”
-}
 
   function render(dt) {
     const w = innerWidth, h = innerHeight;
