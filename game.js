@@ -1920,269 +1920,175 @@
   // =========================
   // Gun Viewmodel (2D overlay)
   // =========================
-  function drawWeaponViewmodel(w, dt) {
-    const W = innerWidth, H = innerHeight;
+ function drawWeaponViewmodel(w, dt) {
+  const W = innerWidth, H = innerHeight;
 
-    // Smooth recoil/muzzle back to 0
-    game.recoil = Math.max(0, game.recoil - dt * 2.6);
-    game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
+  // Smooth recoil/muzzle back to 0
+  game.recoil = Math.max(0, game.recoil - dt * 2.6);
+  game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
 
-    // base position (bottom-right)
-   const baseX = W * 0.62;
-   const baseY = H * 0.86;
+  // sizes
+  const s = Math.min(W, H);
+  const scale = clamp(s / 900, 0.85, 1.25);
 
-    // recoil offsets
-    const kick = game.recoil * 60;
-    const mx = -kick * 0.12;
-    const my =  kick * 0.68;
+  // -------- Viewmodel placement (FPS-ish) --------
+  const baseX = W * 0.70;
+  const baseY = H * 0.88;
 
-    // subtle idle sway
-    const t = performance.now() / 1000;
-    const swayX = Math.sin(t * 1.8) * 2.2;
-    const swayY = Math.cos(t * 2.1) * 1.6;
+  // -------- Recoil behavior (mostly back/up) --------
+  const kick = game.recoil * 60;
+  const mx = -kick * 0.10;
+  const my =  kick * 0.55;
 
-    // final transform
-    const x = baseX + mx + swayX;
-    const y = baseY + my + swayY;
+  // -------- Subtle idle sway --------
+  const t = performance.now() / 1000;
+  const swayX = Math.sin(t * 1.8) * 1.2;
+  const swayY = Math.cos(t * 2.1) * 0.9;
+
+  const x = baseX + mx + swayX;
+  const y = baseY + my + swayY;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  // IMPORTANT:
+  // Your gun shapes are drawn extending in +X direction.
+  // We rotate them so the barrel points more toward the crosshair.
+  const forwardAngle = -1.08; // <- THIS is the “point forward” knob
+  ctx.rotate(forwardAngle + game.recoil * 0.04);
+
+  // Move the model so rotation pivots nicely (prevents weird orbiting)
+  ctx.translate(-140 * scale, -110 * scale);
+
+  // choose weapon type
+  const type = w ? w.type : "pistol";
+
+  // colors
+  const body  = "rgba(22,24,30,.92)";
+  const metal = "rgba(120,130,150,.88)";
+  const grip  = "rgba(35,38,48,.92)";
+  const edge  = "rgba(255,255,255,.12)";
+
+  function rr(x,y,w,h,r){
+    r = Math.max(2, r);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function fillPart(x,y,w,h, r, baseA=0.92){
+    const g = ctx.createLinearGradient(0, y, 0, y+h);
+    g.addColorStop(0, `rgba(35,38,48,${baseA})`);
+    g.addColorStop(0.55, `rgba(20,22,28,${baseA})`);
+    g.addColorStop(1, `rgba(10,12,16,${baseA})`);
+    ctx.fillStyle = g;
+    rr(x,y,w,h,r); ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,.08)";
+    rr(x+2, y+2, w-4, Math.max(3, h*0.20), Math.max(2, r*0.7));
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    rr(x+2, y+h - Math.max(4, h*0.18), w-4, Math.max(4, h*0.18), Math.max(2, r*0.7));
+    ctx.fill();
+  }
+
+  function fillMetal(x,y,w,h, r){
+    const g = ctx.createLinearGradient(x, y, x+w, y);
+    g.addColorStop(0, "rgba(170,180,205,.65)");
+    g.addColorStop(0.35, "rgba(90,105,130,.55)");
+    g.addColorStop(0.7, "rgba(210,220,245,.55)");
+    g.addColorStop(1, "rgba(70,85,110,.55)");
+    ctx.fillStyle = g;
+    rr(x,y,w,h,r); ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,.10)";
+    ctx.fillRect(x+2, y+2, w-4, Math.max(2, h*0.25));
+  }
+
+  function boltScrews(x,y,w,h){
+    ctx.fillStyle = "rgba(255,255,255,.06)";
+    for (let i=0;i<4;i++){
+      ctx.beginPath();
+      ctx.arc(x + (i+1)*(w/5), y + h*0.55, Math.max(1.2, h*0.12), 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // ---- your silhouettes (same logic as before) ----
+  if (player.usingKnife) {
+    const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
+    const ang = 0.9 - swing * 1.8;
+    ctx.rotate(ang);
+    ctx.translate(40 * scale, 40 * scale);
+
+    fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
+    fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+    ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
+
+  } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
+    fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
+    boltScrews(-20*scale, 56*scale, 290*scale, 62*scale);
+
+    fillMetal(40*scale, 44*scale, 170*scale, 12*scale, 6*scale);
+    fillMetal(220*scale, 52*scale, 185*scale, 16*scale, 8*scale);
+
+    ctx.fillStyle = "rgba(0,0,0,.26)";
+    rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.06)";
+    for (let i=0;i<5;i++) ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
 
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(105*scale, 110*scale);
+    ctx.rotate(0.18);
+    fillPart(-10*scale, -10*scale, 60*scale, 88*scale, 12*scale);
+    ctx.restore();
 
-    // gun tilt with recoil
-   ctx.rotate((-0.68) + game.recoil * 0.05);
+    ctx.save();
+    ctx.translate(65*scale, 115*scale);
+    ctx.rotate(0.45);
+    fillPart(-10*scale, -10*scale, 48*scale, 70*scale, 14*scale);
+    ctx.restore();
 
-    // choose a “shape” based on weapon type
-    const type = w ? w.type : "pistol";
+    fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
 
-    // sizes
-    const s = Math.min(W, H);
-    const scale = clamp(s / 900, 0.85, 1.25);
+  } else {
+    // pistol fallback
+    fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);
+    fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale);
 
-    // colors
-    const body = "rgba(22,24,30,.92)";
-    const metal = "rgba(120,130,150,.88)";
-    const grip  = "rgba(35,38,48,.92)";
-    const edge  = "rgba(255,255,255,.12)";
-
-    // helper
-    function rr(x,y,w,h,r){
-      r = Math.max(2, r);
-      ctx.beginPath();
-      ctx.moveTo(x+r,y);
-      ctx.arcTo(x+w,y,x+w,y+h,r);
-      ctx.arcTo(x+w,y+h,x,y+h,r);
-      ctx.arcTo(x,y+h,x,y,r);
-      ctx.arcTo(x,y,x+w,y,r);
-      ctx.closePath();
-    }
-
-    // draw different silhouettes
-     // --- mini helpers for nicer shading ---
-    function fillPart(x,y,w,h, r, baseA=0.92){
-      // soft vertical gradient for “3D-ish” feel
-      const g = ctx.createLinearGradient(0, y, 0, y+h);
-      g.addColorStop(0, `rgba(35,38,48,${baseA})`);
-      g.addColorStop(0.55, `rgba(20,22,28,${baseA})`);
-      g.addColorStop(1, `rgba(10,12,16,${baseA})`);
-      ctx.fillStyle = g;
-      rr(x,y,w,h,r); ctx.fill();
-
-      // top highlight
-      ctx.fillStyle = "rgba(255,255,255,.08)";
-      rr(x+2, y+2, w-4, Math.max(3, h*0.20), Math.max(2, r*0.7));
-      ctx.fill();
-
-      // bottom shadow lip
-      ctx.fillStyle = "rgba(0,0,0,.28)";
-      rr(x+2, y+h - Math.max(4, h*0.18), w-4, Math.max(4, h*0.18), Math.max(2, r*0.7));
-      ctx.fill();
-    }
-
-    function fillMetal(x,y,w,h, r){
-      const g = ctx.createLinearGradient(x, y, x+w, y);
-      g.addColorStop(0, "rgba(170,180,205,.65)");
-      g.addColorStop(0.35, "rgba(90,105,130,.55)");
-      g.addColorStop(0.7, "rgba(210,220,245,.55)");
-      g.addColorStop(1, "rgba(70,85,110,.55)");
-      ctx.fillStyle = g;
-      rr(x,y,w,h,r); ctx.fill();
-
-      ctx.fillStyle = "rgba(255,255,255,.10)";
-      ctx.fillRect(x+2, y+2, w-4, Math.max(2, h*0.25));
-    }
-
-    function boltScrews(x,y,w,h){
-      ctx.fillStyle = "rgba(255,255,255,.06)";
-      for (let i=0;i<4;i++){
-        ctx.beginPath();
-        ctx.arc(x + (i+1)*(w/5), y + h*0.55, Math.max(1.2, h*0.12), 0, Math.PI*2);
-        ctx.fill();
-      }
-    }
-
-    // draw different silhouettes (UPGRADED)
-    if (player.usingKnife) {
-      const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
-      const ang = 0.9 - swing * 1.8;
-      ctx.rotate(ang);
-      ctx.translate(40 * scale, 40 * scale);
-
-      // handle
-      fillPart(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
-      // blade
-      fillMetal(10*scale, 32*scale, 155*scale, 16*scale, 8*scale);
-      ctx.fillStyle = "rgba(255,255,255,.12)";
-      ctx.fillRect(20*scale, 34*scale, 95*scale, 3*scale);
-
-    } else if (type === "ar" || type === "special" || type === "marksman" || type === "sniper") {
-      // Modern AR/DMR silhouette
-      // receiver
-      fillPart(-20*scale, 56*scale, 290*scale, 62*scale, 18*scale);
-      boltScrews(-20*scale, 56*scale, 290*scale, 62*scale);
-
-      // upper rail
-      fillMetal(40*scale, 44*scale, 170*scale, 12*scale, 6*scale);
-
-      // barrel
-      fillMetal(220*scale, 52*scale, 185*scale, 16*scale, 8*scale);
-
-      // handguard
-      ctx.fillStyle = "rgba(0,0,0,.26)";
-      rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.06)";
-      for (let i=0;i<5;i++){
-        ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
-      }
-
-      // magazine (angled)
-      ctx.save();
-      ctx.translate(105*scale, 110*scale);
-      ctx.rotate(0.18);
-      fillPart(-10*scale, -10*scale, 60*scale, 88*scale, 12*scale);
-      ctx.restore();
-
-      // grip
-      ctx.save();
-      ctx.translate(65*scale, 115*scale);
-      ctx.rotate(0.45);
-      fillPart(-10*scale, -10*scale, 48*scale, 70*scale, 14*scale);
-      ctx.restore();
-
-      // stock
-      fillPart(-60*scale, 60*scale, 70*scale, 44*scale, 14*scale);
-      ctx.fillStyle = "rgba(0,0,0,.22)";
-      rr(-78*scale, 76*scale, 30*scale, 28*scale, 12*scale);
-      ctx.fill();
-
-      // optional scope for sniper/marksman
-      if (type === "sniper" || type === "marksman") {
-        fillPart(90*scale, 22*scale, 120*scale, 26*scale, 12*scale);
-        fillMetal(80*scale, 30*scale, 20*scale, 10*scale, 6*scale);
-        fillMetal(210*scale, 30*scale, 20*scale, 10*scale, 6*scale);
-      }
-
-    } else if (type === "smg") {
-      // SMG: compact receiver + short barrel
-      fillPart(-10*scale, 68*scale, 240*scale, 54*scale, 16*scale);
-      fillMetal(170*scale, 66*scale, 110*scale, 14*scale, 8*scale);
-
-      // stick mag
-      ctx.save();
-      ctx.translate(85*scale, 118*scale);
-      ctx.rotate(0.08);
-      fillPart(-10*scale, -10*scale, 44*scale, 90*scale, 10*scale);
-      ctx.restore();
-
-      // grip
-      ctx.save();
-      ctx.translate(40*scale, 118*scale);
-      ctx.rotate(0.40);
-      fillPart(-10*scale, -10*scale, 44*scale, 64*scale, 12*scale);
-      ctx.restore();
-
-      // mini stock
-      fillPart(-55*scale, 76*scale, 60*scale, 36*scale, 12*scale);
-
-    } else if (type === "shotgun") {
-      // Shotgun: fat tube + pump
-      fillPart(-20*scale, 62*scale, 270*scale, 66*scale, 18*scale);
-      fillMetal(200*scale, 52*scale, 220*scale, 18*scale, 10*scale); // barrel
-
-      // pump
-      ctx.fillStyle = "rgba(0,0,0,.28)";
-      rr(70*scale, 82*scale, 90*scale, 34*scale, 12*scale);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.06)";
-      for (let i=0;i<4;i++) ctx.fillRect((78+i*18)*scale, 92*scale, 12*scale, 3*scale);
-
-      // grip
-      ctx.save();
-      ctx.translate(40*scale, 122*scale);
-      ctx.rotate(0.45);
-      fillPart(-10*scale, -10*scale, 50*scale, 70*scale, 14*scale);
-      ctx.restore();
-
-      // stock
-      fillPart(-70*scale, 72*scale, 75*scale, 44*scale, 14*scale);
-
-    } else if (type === "lmg") {
-      // LMG: chunky + box mag
-      fillPart(-30*scale, 60*scale, 310*scale, 76*scale, 18*scale);
-      fillMetal(220*scale, 54*scale, 200*scale, 18*scale, 10*scale);
-
-      // box mag
-      fillPart(110*scale, 125*scale, 86*scale, 70*scale, 12*scale);
-      ctx.fillStyle = "rgba(255,255,255,.05)";
-      ctx.fillRect(118*scale, 134*scale, 70*scale, 6*scale);
-
-      // grip
-      ctx.save();
-      ctx.translate(55*scale, 128*scale);
-      ctx.rotate(0.45);
-      fillPart(-10*scale, -10*scale, 52*scale, 76*scale, 14*scale);
-      ctx.restore();
-
-    } else {
-      // pistol (cleaner, more “real” proportions)
-      fillPart(-10*scale, 88*scale, 190*scale, 48*scale, 18*scale);  // slide/body
-      fillMetal(120*scale, 82*scale, 130*scale, 16*scale, 10*scale); // barrel
-
-      // grip (angled)
-      ctx.save();
-      ctx.translate(35*scale, 138*scale);
-      ctx.rotate(0.42);
-      fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
-      ctx.restore();
-
-      // trigger guard
-      ctx.strokeStyle = "rgba(255,255,255,.08)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(60*scale, 135*scale, 16*scale, 0.2, Math.PI*1.2);
-      ctx.stroke();
-    }
-
-
-    // outline
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // muzzle flash (simple)
-    if (game.muzzle > 0.001) {
-      const a = clamp(game.muzzle / 0.06, 0, 1);
-      ctx.save();
-      ctx.globalAlpha = 0.7 * a;
-      ctx.fillStyle = "rgba(255,210,80,.85)";
-      ctx.beginPath();
-      ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-    }
-
+    ctx.save();
+    ctx.translate(35*scale, 138*scale);
+    ctx.rotate(0.42);
+    fillPart(-10*scale, -10*scale, 60*scale, 86*scale, 16*scale);
     ctx.restore();
   }
+
+  // outline
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // muzzle flash
+  if (game.muzzle > 0.001) {
+    const a = clamp(game.muzzle / 0.06, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = 0.7 * a;
+    ctx.fillStyle = "rgba(255,210,80,.85)";
+    ctx.beginPath();
+    ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore(); // <-- THIS prevents “spinning screen”
+}
 
   function render(dt) {
     const w = innerWidth, h = innerHeight;
