@@ -1928,13 +1928,13 @@
     game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
 
     // base position (bottom-right)
-    const baseX = W * 0.78;
-    const baseY = H * 0.78;
+   const baseX = W * 0.62;
+   const baseY = H * 0.86;
 
     // recoil offsets
     const kick = game.recoil * 60;
-    const mx = -kick * 0.55;
-    const my = kick * 0.35;
+    const mx = -kick * 0.12;
+    const my =  kick * 0.68;
 
     // subtle idle sway
     const t = performance.now() / 1000;
@@ -1949,7 +1949,7 @@
     ctx.translate(x, y);
 
     // gun tilt with recoil
-    ctx.rotate((-0.12) + game.recoil * 0.10);
+   ctx.rotate((-0.68) + game.recoil * 0.05);
 
     // choose a “shape” based on weapon type
     const type = w ? w.type : "pistol";
