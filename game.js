@@ -1917,6 +1917,223 @@
   // =========================
   // Render (raycast + sprites)
   // =========================
+  // =========================
+  // Gun Viewmodel (2D overlay)
+  // =========================
+  function drawWeaponViewmodel(w, dt) {
+    const W = innerWidth, H = innerHeight;
+
+    // Smooth recoil/muzzle back to 0
+    game.recoil = Math.max(0, game.recoil - dt * 2.6);
+    game.muzzle = Math.max(0, game.muzzle - dt * 5.5);
+
+    // base position (bottom-right)
+    const baseX = W * 0.78;
+    const baseY = H * 0.78;
+
+    // recoil offsets
+    const kick = game.recoil * 60;
+    const mx = -kick * 0.55;
+    const my = kick * 0.35;
+
+    // subtle idle sway
+    const t = performance.now() / 1000;
+    const swayX = Math.sin(t * 1.8) * 2.2;
+    const swayY = Math.cos(t * 2.1) * 1.6;
+
+    // final transform
+    const x = baseX + mx + swayX;
+    const y = baseY + my + swayY;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // gun tilt with recoil
+    ctx.rotate((-0.12) + game.recoil * 0.10);
+
+    // choose a “shape” based on weapon type
+    const type = w ? w.type : "pistol";
+
+    // sizes
+    const s = Math.min(W, H);
+    const scale = clamp(s / 900, 0.85, 1.25);
+
+    // colors
+    const body = "rgba(22,24,30,.92)";
+    const metal = "rgba(120,130,150,.88)";
+    const grip  = "rgba(35,38,48,.92)";
+    const edge  = "rgba(255,255,255,.12)";
+
+    // helper
+    function rr(x,y,w,h,r){
+      r = Math.max(2, r);
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+
+    // draw different silhouettes
+    if (player.usingKnife) {
+      // Knife swipe
+      const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
+      const ang = 0.9 - swing * 1.8;
+
+      ctx.rotate(ang);
+      ctx.translate(40 * scale, 40 * scale);
+
+      // handle
+      ctx.fillStyle = grip;
+      rr(-30*scale, 45*scale, 70*scale, 26*scale, 10*scale);
+      ctx.fill();
+
+      // blade
+      ctx.fillStyle = metal;
+      ctx.beginPath();
+      ctx.moveTo(10*scale, 52*scale);
+      ctx.lineTo(150*scale, 20*scale);
+      ctx.lineTo(165*scale, 35*scale);
+      ctx.lineTo(30*scale, 60*scale);
+      ctx.closePath();
+      ctx.fill();
+
+      // shine
+      ctx.fillStyle = "rgba(255,255,255,.10)";
+      ctx.fillRect(35*scale, 50*scale, 85*scale, 4*scale);
+
+    } else if (type === "shotgun") {
+      // Shotgun: big barrel + pump
+      ctx.fillStyle = body;
+      rr(-20*scale, 40*scale, 260*scale, 70*scale, 18*scale);
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(160*scale, 22*scale, 180*scale, 26*scale, 12*scale); // barrel
+      ctx.fill();
+
+      ctx.fillStyle = grip;
+      rr(20*scale, 95*scale, 65*scale, 55*scale, 14*scale); // grip
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,.25)";
+      rr(70*scale, 75*scale, 80*scale, 35*scale, 12*scale); // pump
+      ctx.fill();
+
+    } else if (type === "sniper" || type === "marksman") {
+      // Sniper: long barrel + scope
+      ctx.fillStyle = body;
+      rr(-30*scale, 45*scale, 320*scale, 60*scale, 18*scale);
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(240*scale, 30*scale, 220*scale, 20*scale, 10*scale); // barrel
+      ctx.fill();
+
+      // scope
+      ctx.fillStyle = "rgba(0,0,0,.35)";
+      rr(85*scale, 20*scale, 110*scale, 26*scale, 12*scale);
+      ctx.fill();
+      ctx.fillStyle = edge;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = grip;
+      rr(35*scale, 95*scale, 65*scale, 55*scale, 14*scale);
+      ctx.fill();
+
+    } else if (type === "lmg") {
+      // LMG: chunky body + box mag
+      ctx.fillStyle = body;
+      rr(-35*scale, 38*scale, 300*scale, 80*scale, 18*scale);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,.30)";
+      rr(90*scale, 110*scale, 80*scale, 65*scale, 12*scale); // box mag
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(200*scale, 28*scale, 170*scale, 22*scale, 10*scale);
+      ctx.fill();
+
+      ctx.fillStyle = grip;
+      rr(25*scale, 95*scale, 65*scale, 55*scale, 14*scale);
+      ctx.fill();
+
+    } else if (type === "smg") {
+      // SMG: shorter body + stick mag
+      ctx.fillStyle = body;
+      rr(-25*scale, 52*scale, 230*scale, 58*scale, 16*scale);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,.30)";
+      rr(70*scale, 100*scale, 45*scale, 75*scale, 10*scale); // stick mag
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(160*scale, 45*scale, 130*scale, 18*scale, 10*scale);
+      ctx.fill();
+
+      ctx.fillStyle = grip;
+      rr(22*scale, 95*scale, 55*scale, 50*scale, 14*scale);
+      ctx.fill();
+
+    } else if (type === "ar" || type === "special") {
+      // AR/Special: medium body + mag
+      ctx.fillStyle = body;
+      rr(-30*scale, 46*scale, 280*scale, 66*scale, 18*scale);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,.30)";
+      rr(95*scale, 102*scale, 55*scale, 78*scale, 12*scale); // mag
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(210*scale, 38*scale, 160*scale, 20*scale, 10*scale);
+      ctx.fill();
+
+      ctx.fillStyle = grip;
+      rr(30*scale, 95*scale, 60*scale, 55*scale, 14*scale);
+      ctx.fill();
+
+    } else {
+      // Pistol default
+      ctx.fillStyle = body;
+      rr(-10*scale, 70*scale, 170*scale, 50*scale, 18*scale);
+      ctx.fill();
+
+      ctx.fillStyle = grip;
+      rr(25*scale, 95*scale, 55*scale, 60*scale, 14*scale);
+      ctx.fill();
+
+      ctx.fillStyle = metal;
+      rr(120*scale, 62*scale, 110*scale, 18*scale, 10*scale);
+      ctx.fill();
+    }
+
+    // outline
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // muzzle flash (simple)
+    if (game.muzzle > 0.001) {
+      const a = clamp(game.muzzle / 0.06, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.7 * a;
+      ctx.fillStyle = "rgba(255,210,80,.85)";
+      ctx.beginPath();
+      ctx.ellipse(350*scale, 46*scale, 18*scale, 10*scale, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
   function render(dt) {
     const w = innerWidth, h = innerHeight;
     const horizon = (h / 2) + (player.pitch * (h * 0.35));
@@ -2173,6 +2390,7 @@
     ctx.stroke();
 
     drawMinimap();
+    drawWeaponViewmodel(currentWeapon(), dt);
 
     const near = nearAnyMachine();
     if (near && game.mode === "play") {
