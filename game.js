@@ -1920,7 +1920,7 @@
   // =========================
   // Gun Viewmodel (2D overlay)
   // =========================
- function drawWeaponViewmodel(w, dt) {
+function drawWeaponViewmodel(w, dt) {
   const W = innerWidth, H = innerHeight;
 
   // Smooth recoil/muzzle back to 0
@@ -1929,21 +1929,24 @@
 
   // sizes
   const s = Math.min(W, H);
-  const scale = clamp(s / 900, 0.85, 1.25);
 
-  // -------- Viewmodel placement (FPS-ish) --------
-  const baseX = W * 0.70;
-  const baseY = H * 0.88;
+  // 🔥 MAKE THE VIEWMODEL BIGGER (COD-ish)
+  // If it's still too small/big, change 1.85 to 1.6 or 2.2
+  const scale = clamp(s / 900, 0.85, 1.25) * 1.85;
 
-  // -------- Recoil behavior (mostly back/up) --------
+  // -------- Viewmodel placement (more centered, lower) --------
+  const baseX = W * 0.58;  // left/right (smaller = more left)
+  const baseY = H * 0.92;  // up/down (smaller = higher)
+
+  // -------- Recoil behavior (mostly up/back) --------
   const kick = game.recoil * 60;
-  const mx = -kick * 0.10;
+  const mx = -kick * 0.08;
   const my =  kick * 0.55;
 
-  // -------- Subtle idle sway --------
+  // -------- Subtle idle sway (keep it small) --------
   const t = performance.now() / 1000;
-  const swayX = Math.sin(t * 1.8) * 1.2;
-  const swayY = Math.cos(t * 2.1) * 0.9;
+  const swayX = Math.sin(t * 1.8) * 0.9;
+  const swayY = Math.cos(t * 2.1) * 0.7;
 
   const x = baseX + mx + swayX;
   const y = baseY + my + swayY;
@@ -1951,24 +1954,25 @@
   ctx.save();
   ctx.translate(x, y);
 
-  // IMPORTANT:
-  // Your gun shapes are drawn extending in +X direction.
-  // We rotate them so the barrel points more toward the crosshair.
-  const forwardAngle = -1.08; // <- THIS is the “point forward” knob
+  // -------- Forward facing angle --------
+  // “Point forward” knob:
+  // more negative = points more toward center
+  const forwardAngle = -1.15;
   ctx.rotate(forwardAngle + game.recoil * 0.04);
 
-  // Move the model so rotation pivots nicely (prevents weird orbiting)
-  ctx.translate(-140 * scale, -110 * scale);
+  // 🔥 PIVOT FIX (this is what makes it feel "held", not "orbiting")
+  ctx.translate(-220 * scale, -170 * scale);
 
-  // choose weapon type
+  // choose a “shape” based on weapon type
   const type = w ? w.type : "pistol";
 
   // colors
-  const body  = "rgba(22,24,30,.92)";
+  const body = "rgba(22,24,30,.92)";
   const metal = "rgba(120,130,150,.88)";
   const grip  = "rgba(35,38,48,.92)";
   const edge  = "rgba(255,255,255,.12)";
 
+  // helper
   function rr(x,y,w,h,r){
     r = Math.max(2, r);
     ctx.beginPath();
@@ -2019,7 +2023,7 @@
     }
   }
 
-  // ---- your silhouettes (same logic as before) ----
+  // ---- silhouettes ----
   if (player.usingKnife) {
     const swing = player.knife.swing > 0 ? (1 - (player.knife.swing / 0.14)) : 1;
     const ang = 0.9 - swing * 1.8;
@@ -2041,8 +2045,6 @@
     ctx.fillStyle = "rgba(0,0,0,.26)";
     rr(170*scale, 62*scale, 90*scale, 34*scale, 12*scale);
     ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.06)";
-    for (let i=0;i<5;i++) ctx.fillRect((178+i*16)*scale, 70*scale, 10*scale, 3*scale);
 
     ctx.save();
     ctx.translate(105*scale, 110*scale);
@@ -2087,7 +2089,7 @@
     ctx.restore();
   }
 
-  ctx.restore(); // <-- THIS prevents “spinning screen”
+  ctx.restore(); // IMPORTANT: prevents “spinning screen”
 }
 
   function render(dt) {
